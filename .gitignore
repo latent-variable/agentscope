@@ -1,0 +1,8 @@
+# Recoverable backups sync.sh makes when it replaces a real file with a symlink.
+backups/
+
+# Secrets / tokens — never commit.
+*.token
+auth-token
+.env
+*.pem
