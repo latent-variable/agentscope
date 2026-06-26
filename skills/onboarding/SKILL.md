@@ -68,8 +68,9 @@ Verify nothing is left: `grep -n '{{' ~/.agents/AGENTS.md` must return nothing.
 Only if they said yes to spoken summaries and are on macOS:
 
 ```bash
-# Yap is currently a private repo; if public for them, they can clone + build, else point to releases.
+# Public, MIT-licensed. Easiest install is Homebrew; or DMG from releases; or build from source.
 echo "Yap: local-first on-device TTS + STT for macOS — github.com/latent-variable/Yap"
+echo "  brew install --cask latent-variable/tap/yap   # or grab a DMG from /releases"
 ```
 
 Offer to walk them through install. Don't block onboarding on it — note it and move on if they defer.
