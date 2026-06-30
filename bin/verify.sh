@@ -32,6 +32,30 @@ check_symlinks(){
   done
 }
 
+check_skills(){
+  echo "-- skill parity (every canon skill reaches every installed agent) --"
+  local skills="$AGENTS/skills" s name d dirs=()
+  [ -d "$HOME/.claude" ] && dirs+=("$HOME/.claude/skills")
+  [ -d "$HOME/.codex" ]  && dirs+=("$HOME/.codex/skills")
+  [ -d "$HOME/.gemini" ] && dirs+=("$HOME/.gemini/skills")
+  [ -d "$HOME/.pi" ]     && dirs+=("$HOME/.pi/agent/skills")
+  if [ "${#dirs[@]}" -eq 0 ]; then note "  (no agent CLIs installed yet)"; return; fi
+  for s in "$skills"/*/; do
+    [ -d "$s" ] || continue
+    name="$(basename "$s")"
+    for d in "${dirs[@]}"; do
+      [ -e "$d/$name" ] || flag "skill '$name' not reachable in $d"
+    done
+  done
+  # any dangling skill link is dead weight a loader can trip on
+  for d in "${dirs[@]}"; do
+    for l in "$d"/*; do
+      [ -L "$l" ] && [ ! -e "$l" ] && flag "dangling skill link $l"
+    done
+  done
+  note "  checked $(ls -d "$skills"/*/ 2>/dev/null | wc -l | tr -d ' ') skills across ${#dirs[@]} agents"
+}
+
 check_paths(){
   echo "-- referenced paths --"
   local paths okc=0 p
@@ -81,7 +105,7 @@ echo "== drift check: $AGENTS =="
 if [ "$MODE" = paths ]; then
   check_paths
 else
-  check_symlinks; check_paths; check_repos; check_git
+  check_symlinks; check_skills; check_paths; check_repos; check_git
 fi
 echo "== $([ $drift -eq 0 ] && echo CLEAN || echo "DRIFT FOUND") =="
 exit $drift

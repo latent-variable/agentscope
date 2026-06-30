@@ -49,7 +49,7 @@ Want to do it by hand instead? `~/.agents/bin/sync.sh` lays the symlinks; edit `
   bin/verify.sh # drift detector, flags stale paths so an agent self-corrects
 ```
 
-**Skills it ships with:** `onboarding` (the setup interview), `remember` (any agent writes a fact, all of them inherit it), `self-correct` (canon repairs itself when reality drifts), `project-scope` (per-repo agent context), `review-cycle` (branch, PR, review, merge), `pull-requests`, `draft-response`, `security-audit`.
+**Skills it ships with:** `onboarding` (the setup interview), `remember` (any agent writes a fact, all of them inherit it), `self-correct` (canon repairs itself when reality drifts), `project-scope` (per-repo agent context), `review-cycle` (branch, PR, review, merge), `eli5` (plain-language explanations on demand), `pull-requests`, `draft-response`, `security-audit`.
 
 ## How each tool gets wired
 
