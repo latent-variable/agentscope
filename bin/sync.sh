@@ -34,9 +34,16 @@ link(){
 }
 
 # link_skills <skills_dir> : per-skill symlinks into a tool's skills dir.
+# Prunes dead canon links first (a skill removed from canon leaves a dangling link),
+# then (re)links every current canon skill. Real non-canon skills in the dir are left alone.
 link_skills(){
-  local dir="$1"
+  local dir="$1" l tgt
   mkdir -p "$dir"
+  for l in "$dir"/*; do
+    [ -L "$l" ] || continue
+    tgt="$(readlink "$l")"
+    case "$tgt" in "$SKILLS"/*) [ -e "$l" ] || { rm "$l"; note "prune   dead link $(basename "$l")"; };; esac
+  done
   for s in "$SKILLS"/*/; do
     [ -d "$s" ] || continue
     link "${s%/}" "$dir/$(basename "$s")"
@@ -76,20 +83,12 @@ if have "$HOME/.gemini"; then
   link_skills "$HOME/.gemini/skills"
 else note "skip Gemini (~/.gemini absent)"; fi
 
-# --- Pi (reads ~/.agents/skills natively; only needs the instructions link) ---
+# --- Pi (loads from its own skills dir like the others, so give it the same per-skill links) ---
 if have "$HOME/.pi"; then
   link "$CANON" "$HOME/.pi/agent/AGENTS.md"
-  # A stale pi-local skill with the same name as a canon skill shadows it. Retire any such collider.
-  PI_SKILLS="$HOME/.pi/agent/skills"
-  if [ -d "$PI_SKILLS" ]; then
-    for s in "$SKILLS"/*/; do
-      [ -d "$s" ] || continue
-      name="$(basename "$s")"; dst="$PI_SKILLS/$name"
-      if [ -e "$dst" ] && [ ! -L "$dst" ]; then
-        mkdir -p "$BK"; mv "$dst" "$BK/pi-skill-$name"; note "retire  pi-local $name (collides with canon)"
-      fi
-    done
-  fi
+  # link() backs up any colliding pi-local real dir into backups/ before linking, so a stale
+  # pi-local copy can't shadow canon. Non-canon pi-local skills are left untouched.
+  link_skills "$HOME/.pi/agent/skills"
 else note "skip Pi (~/.pi absent)"; fi
 
 echo "== done. backups (if any): $BK =="
