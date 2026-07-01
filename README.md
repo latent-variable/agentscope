@@ -70,9 +70,11 @@ Tell an agent your project moved and the old path is still sitting in canon? The
 
 If you'd rather *hear* what your agent did than read it, turn on the **🔊 Speak to me** convention during onboarding: every reply ends with a few plain spoken sentences, written to be heard, not skimmed. Pair it with **[Yap](https://github.com/latent-variable/Yap)**, local-first on-device text-to-speech for macOS, and your agent literally briefs you out loud while you stare out the window. macOS only for now.
 
-## The one honest seam
+## Memory: shared reads, discretionary writes
 
-Reading is instant and shared (symlinks). **Writing back** isn't fully solved yet: Claude Code's auto-memory writes straight into `~/.agents/memory/`, but the other tools mostly read. When they learn something durable, they use the `remember` skill to drop it in by hand. True multi-agent memory write-back isn't a standard anyone's nailed. This is the pragmatic version that works today.
+Every agent reads the same `~/.agents/memory/` instantly through symlinks, and every agent can **write** to it too, via the `remember` skill (write the fact, index it in `MEMORY.md`, commit). Write-back works across all of them today.
+
+The one asymmetry: Claude Code captures memories automatically in the background, while Codex, Gemini, and Pi write when they judge a fact worth keeping. That automatic capture is a per-vendor harness feature; a shared folder can't inject it, and no cross-tool standard for it exists yet. This is fine by design. Reads are shared, the primary agent does most of the capturing, and the others stay read-mostly, writing only what clearly matters. Memory is kept compact and self-correcting: agents update an existing note rather than pile new ones on, so the shared brain never bloats.
 
 ## License
 

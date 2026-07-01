@@ -58,5 +58,6 @@ Memory at `~/.agents/memory/` is shared by every agent. Any agent — not just C
 
 Every agent writes to the same standard so the weakest model doesn't degrade the shared brain:
 - One fact per file. Minimal. No restating the obvious.
-- Description line must be genuinely useful for recall — it's what future agents scan.
+- Description line must be genuinely useful for recall; it's what future agents scan.
 - If unsure whether something is durable or just this-session, ask rather than guessing.
+- Write-back is discretionary and unequal by design: the auto-memory agent (Claude) captures most; read-mostly agents write only clearly-durable facts. Fewer, better memories beat volume.
