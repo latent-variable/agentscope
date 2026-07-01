@@ -1,12 +1,12 @@
 ---
 name: pull-requests
-description: How to write pull requests and commits — terse style, structure, and attribution. Load when opening a PR, writing a commit, or summarizing a branch.
+description: How to write pull requests and commits, terse style, structure, and attribution. Load when opening a PR, writing a commit, or summarizing a branch.
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
 # Pull Requests & Commits
 
-House style for PR descriptions and commit messages. Artifacts, so write them *normally* (terse, not ELI5 — ELI5 is only for talking to the user).
+House style for PR descriptions and commit messages. Artifacts, so write them *normally* (terse, not ELI5, ELI5 is only for talking to the user).
 
 ## Commit messages
 
@@ -22,14 +22,14 @@ House style for PR descriptions and commit messages. Artifacts, so write them *n
 
 - **Action before context.** Lead with what changed. Why-it-matters second.
 - Terse and punchy. Say it once. Cut hedging preamble.
-- Structure: 1–2 sentence summary → bullets of concrete changes → testing/verification → caveats/follow-ups if any.
+- Structure: 1 to 2 sentence summary → bullets of concrete changes → testing/verification → caveats/follow-ups if any.
 - No duplicate summaries. One source of truth per fact.
 - Don't restate the diff line-by-line; surface what a reviewer can't see (intent, risk, what was verified).
 - End the body with the attribution line (same as commits) for non-trivial PRs.
 
 ## Review behavior
 
-- Project may ship its own review tooling/skill — check the repo's `AGENTS.md` first.
+- Project may ship its own review tooling/skill, check the repo's `AGENTS.md` first.
 - When reviewing, one line per finding: location, problem, fix. Cut noise, keep the actionable signal.
 
 ## Before pushing

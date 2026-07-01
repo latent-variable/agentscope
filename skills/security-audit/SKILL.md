@@ -17,15 +17,15 @@ The user's project directories aren't hardcoded here (they're personal). Resolve
 
 Then also scan these common stray-install locations under `$HOME`:
 
-- `~/.npm/` — npm cache and npx installs
-- `~/.config/` — config-level node packages
-- `~/.local/` — local bin packages
+- `~/.npm/`: npm cache and npx installs
+- `~/.config/`: config-level node packages
+- `~/.local/`: local bin packages
 
 ## Audit Steps
 
 ### Step 1: Discover All Package Ecosystems
 
-For each project directory, recursively find (unlimited depth — monorepos nest deeply):
+For each project directory, recursively find (unlimited depth, monorepos nest deeply):
 
 - **npm/Node.js**: `package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `bun.lockb`
 - **Python**: `requirements.txt`, `pyproject.toml`, `Pipfile.lock`, `poetry.lock`, `uv.lock`

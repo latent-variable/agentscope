@@ -12,7 +12,7 @@ allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 
 Goal: turn the shipped **template** into *this person's* user-scope brain, and wire every agent CLI on their
 machine to it. After this, every tool (Claude, Codex, Gemini/Antigravity, Pi) reads the same identity,
-preferences, skills, and memory. Be warm and quick — this is someone's first impression of the system.
+preferences, skills, and memory. Be warm and quick, this is someone's first impression of the system.
 
 ## 0. Detect state first (don't re-onboard a configured user)
 
@@ -30,20 +30,20 @@ Detect installed CLIs (only these get wired):
 for d in .claude .codex .gemini .pi; do [ -d "$HOME/$d" ] && echo "found: ~/$d"; done
 ```
 
-## 1. Interview (keep it short — 6 quick prompts, conversational)
+## 1. Interview (keep it short, 6 quick prompts, conversational)
 
 Ask these, adapting to what they volunteer. Don't interrogate; one message with the list is fine.
 
 1. **Who are you?** Name + a sentence or two: role, background, what you build. (→ bio + `user_profile.md`)
 2. **Where does your work live?** Top project directories (e.g. `~/Documents/...`, `~/Code/...`) + GitHub handle. (→ "Where my work lives")
-3. **Explanation style — do you want ELI5?** Plain-language analogies layered on top of full technical substance, or straight technical only? (→ keeps/strips the ELI5 line)
-4. **Spoken summaries?** Do you use (or want) text-to-speech reading a short "here's what I did" at the end of each reply? (→ keeps/strips the **🔊 Speak to me** block). If yes and they're on **macOS**, mention **Yap** (`github.com/latent-variable/Yap`) — local-first on-device TTS+STT built for this — and offer to help install it (§4).
-5. **Workflow — structured review cycle?** Do you want agents to branch / open PRs / run automated review before merging code, or keep it lightweight? (→ keeps/strips the review-cycle bullet)
+3. **Explanation style, do you want ELI5?** Plain-language analogies layered on top of full technical substance, or straight technical only? (→ keeps/strips the ELI5 line)
+4. **Spoken summaries?** Do you use (or want) text-to-speech reading a short "here's what I did" at the end of each reply? (→ keeps/strips the **🔊 Speak to me** block). If yes and they're on **macOS**, mention **Yap** (`github.com/latent-variable/Yap`), local-first on-device TTS+STT built for this, and offer to help install it (§4).
+5. **Workflow, structured review cycle?** Do you want agents to branch / open PRs / run automated review before merging code, or keep it lightweight? (→ keeps/strips the review-cycle bullet)
 6. **Attribution name** for commits (defaults to "Claude" / the agent's own name + model id). Most people keep the default.
 
 ## 2. Fill the template
 
-Edit `~/.agents/AGENTS.md` — replace every `{{...}}` block:
+Edit `~/.agents/AGENTS.md`, replace every `{{...}}` block:
 
 - `{{YOUR_NAME}}` in the title and "Who I am" → their name + bio paragraph.
 - `{{BIO ...}}` → the one-paragraph bio.
@@ -69,11 +69,11 @@ Only if they said yes to spoken summaries and are on macOS:
 
 ```bash
 # Public, MIT-licensed. Easiest install is Homebrew; or DMG from releases; or build from source.
-echo "Yap: local-first on-device TTS + STT for macOS — github.com/latent-variable/Yap"
+echo "Yap: local-first on-device TTS + STT for macOS, github.com/latent-variable/Yap"
 echo "  brew install --cask latent-variable/tap/yap   # or grab a DMG from /releases"
 ```
 
-Offer to walk them through install. Don't block onboarding on it — note it and move on if they defer.
+Offer to walk them through install. Don't block onboarding on it, note it and move on if they defer.
 
 ## 5. Wire every installed CLI
 
@@ -100,6 +100,5 @@ cd ~/.agents && git add -A && git commit -m "onboarding: my user scope" && git p
 ```
 
 Then a short confirmation: who you recorded them as, which CLIs you wired, which optional features are on
-(ELI5, Speak-to-me, review-cycle), and the two things they control going forward —
-edit `AGENTS.md` for global behavior, drop facts via the `remember` skill. Point them at the other skills
+(ELI5, Speak-to-me, review-cycle), and the two things they control going forward, edit `AGENTS.md` for global behavior, drop facts via the `remember` skill. Point them at the other skills
 by name so they know what's available.

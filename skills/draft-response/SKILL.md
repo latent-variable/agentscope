@@ -21,7 +21,7 @@ Draft a response on behalf of the user. Follow these rules strictly.
 ## When someone gives useful feedback
 
 - say what was addressed in plain language; invite another look when appropriate
-- do NOT open with "thanks for X" or "appreciate the context" — performative, nobody talks like that. get into the substance.
+- do NOT open with "thanks for X" or "appreciate the context", performative, nobody talks like that. get into the substance.
 
 ## When there are alternative approaches
 
@@ -33,7 +33,7 @@ make impact easy to follow, prefer concrete examples over abstract wording, high
 
 ## Workflow
 
-1. Read the context — thread, issue, PR, conversation
+1. Read the context, thread, issue, PR, conversation
 2. Understand who said what and what needs addressing
 3. Draft the response
 4. Present it clearly for review

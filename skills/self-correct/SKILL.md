@@ -1,8 +1,7 @@
 ---
 name: self-correct
 description: >
-  Audit and repair the shared agent knowledge base (~/.agents) when it drifts from reality —
-  removed/renamed dirs or repos, changed paths/flags/commands, superseded facts. Keeps instructions,
+  Audit and repair the shared agent knowledge base (~/.agents) when it drifts from reality: removed/renamed dirs or repos, changed paths/flags/commands, superseded facts. Keeps instructions,
   memory, and skills true for every agent on the machine. Use on demand, on a schedule, or whenever
   you notice canon is stale mid-task.
 allowed-tools: Bash, Read, Edit, Grep, Glob
@@ -14,7 +13,7 @@ Canon at `~/.agents/` is read by every agent (Claude, Codex, Gemini, Pi). One st
 
 ## When to run
 
-- **Reactively (default):** the moment you discover, during any task, that a canon fact is wrong — a path moved, a repo was deleted, a tool was renamed, a flag changed. Fix it then.
+- **Reactively (default):** the moment you discover, during any task, that a canon fact is wrong, a path moved, a repo was deleted, a tool was renamed, a flag changed. Fix it then.
 - **Proactively:** on demand or scheduled.
 
 ## Procedure
@@ -33,7 +32,7 @@ Canon at `~/.agents/` is read by every agent (Claude, Codex, Gemini, Pi). One st
    - Changed flag/command/path → update the exact string.
    - Superseded fact → replace; keep one source of truth, no stale duplicate.
 
-4. **Re-verify.** `~/.agents/bin/verify.sh` again — DRIFT for the fixed item should be gone.
+4. **Re-verify.** `~/.agents/bin/verify.sh` again, DRIFT for the fixed item should be gone.
 
 5. **Commit + push** (propagates to all agents, backs up):
    ```bash
@@ -46,5 +45,5 @@ Canon at `~/.agents/` is read by every agent (Claude, Codex, Gemini, Pi). One st
 
 - Minimal edits. Correct the fact; don't rewrite the file.
 - Recoverable deletes only (`trash`, never `rm -rf`) per global rules.
-- Don't auto-correct subjective preferences or anything ambiguous — surface those to the user instead.
+- Don't auto-correct subjective preferences or anything ambiguous, surface those to the user instead.
 - If a referenced GitHub repo 404s, confirm it isn't just private/renamed (`gh repo view`) before deleting the reference.

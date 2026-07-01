@@ -9,7 +9,7 @@ allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 
 # Remember (cross-agent write-back)
 
-Memory at `~/.agents/memory/` is shared by every agent. Any agent — not just Claude — can contribute. This skill is how Codex, Gemini, and Pi (which have no auto-memory) write durable facts the same way Claude's auto-memory does. One fact per file. Match the existing files' format exactly.
+Memory at `~/.agents/memory/` is shared by every agent. Any agent, not just Claude, can contribute. This skill is how Codex, Gemini, and Pi (which have no auto-memory) write durable facts the same way Claude's auto-memory does. One fact per file. Match the existing files' format exactly.
 
 ## When to use
 
@@ -19,20 +19,20 @@ Memory at `~/.agents/memory/` is shared by every agent. Any agent — not just C
 
 ## Memory types
 
-- `user` — who the user is (role, skills, preferences).
-- `feedback` — guidance on how to work (corrections + confirmed approaches). Include the **why**.
-- `project` — ongoing work, goals, constraints not derivable from code/git. Convert relative dates to absolute.
-- `reference` — pointers to external resources (URLs, dashboards, tickets).
+- `user`: who the user is (role, skills, preferences).
+- `feedback`: guidance on how to work (corrections + confirmed approaches). Include the **why**.
+- `project`: ongoing work, goals, constraints not derivable from code/git. Convert relative dates to absolute.
+- `reference`: pointers to external resources (URLs, dashboards, tickets).
 
 ## Procedure
 
-1. **Dedupe first.** `grep -ril "<topic>" ~/.agents/memory/` — if a file already covers it, **update that file**, don't make a duplicate. Delete memories that turn out wrong (`trash`, never `rm -rf`).
+1. **Dedupe first.** `grep -ril "<topic>" ~/.agents/memory/`, if a file already covers it, **update that file**, don't make a duplicate. Delete memories that turn out wrong (`trash`, never `rm -rf`).
 
 2. **Write the file** `~/.agents/memory/<slug>.md` (kebab-case slug), with this frontmatter:
    ```markdown
    ---
    name: <Short Title>
-   description: <one line — used to decide relevance during recall>
+   description: <one line, used to decide relevance during recall>
    metadata:
      type: user | feedback | project | reference
    ---
@@ -43,14 +43,14 @@ Memory at `~/.agents/memory/` is shared by every agent. Any agent — not just C
    - Link related memories with `[[their-slug]]`. Link liberally; a `[[slug]]` with no file yet is fine.
 
 3. **Index it.** Add ONE line to `~/.agents/memory/MEMORY.md`:
-   `- [<Title>](<slug>.md) — <hook>`
+   `- [<Title>](<slug>.md), <hook>`
    (MEMORY.md is the index loaded every session. One line each, no content.)
 
 4. **Ship it** so all agents inherit it:
    ```bash
    cd ~/.agents && git add -A && git commit -m "memory: <slug>" && git push
    ```
-   (If `git push` fails on network/sandbox, the commit alone is enough — a backup job or the next push ships it.)
+   (If `git push` fails on network/sandbox, the commit alone is enough, a backup job or the next push ships it.)
 
 5. **Confirm** in one line: what you saved and where.
 

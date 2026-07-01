@@ -9,10 +9,10 @@ allowed-tools: Bash, Read, Grep, Glob
 
 # Project scope vs user scope
 
-Two layers. Don't conflate them — conflating them is exactly the bug this skill exists to prevent.
+Two layers. Don't conflate them, conflating them is exactly the bug this skill exists to prevent.
 
-- **USER scope = `~/.agents`** — global, transcends every project. The canonical brain (`AGENTS.md`, `memory/`, `skills/`) symlinked into each agent CLI. Facts about the user, cross-project doctrine, reusable skills.
-- **PROJECT scope = `<repo>/.agents/`** — this repo only. Per-project memory + a symlinked copy of the canon skills. Gitignored.
+- **USER scope = `~/.agents`**: global, transcends every project. The canonical brain (`AGENTS.md`, `memory/`, `skills/`) symlinked into each agent CLI. Facts about the user, cross-project doctrine, reusable skills.
+- **PROJECT scope = `<repo>/.agents/`**: this repo only. Per-project memory + a symlinked copy of the canon skills. Gitignored.
 
 ## Layout (per repo, after bootstrap)
 
@@ -43,11 +43,11 @@ Real incident this prevents: an agent edited a project's `CLAUDE.md` believing i
 ## Where to write a memory
 
 - Fact about **the user or cross-project doctrine** → user scope. Use the `remember` skill (`~/.agents/memory/` + `MEMORY.md` pointer + commit/push).
-- Fact about **this project only** (its quirks, decisions, gotchas) → `<repo>/.agents/memory/` + a line in that repo's `.agents/memory/MEMORY.md`. Gitignored, so no commit needed — but it's local-only, not backed up.
+- Fact about **this project only** (its quirks, decisions, gotchas) → `<repo>/.agents/memory/` + a line in that repo's `.agents/memory/MEMORY.md`. Gitignored, so no commit needed, but it's local-only, not backed up.
 
-## First time in a repo (new or existing) — set it up, don't retrofit
+## First time in a repo (new or existing), set it up, don't retrofit
 
-Project scope should already exist when you start work. Check; if it's not wired, wire it **before** substantive work — don't leave it for a later manual fix.
+Project scope should already exist when you start work. Check; if it's not wired, wire it **before** substantive work, don't leave it for a later manual fix.
 
 ```bash
 [ -d .agents/skills ] || ~/.agents/bin/project-sync.sh .   # bootstrap if missing
