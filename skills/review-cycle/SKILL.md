@@ -61,7 +61,13 @@ Trigger whatever automated reviewer you use (a hosted PR reviewer, a CI review b
 - **Critical / high = blocking.** While any round returns even one high, address **every** item raised that round (high *and* medium), push, re-request review. Repeat until a full round comes back with **zero highs**.
 - **Medium / low = judgment.** Once no highs remain: fix the worthwhile ones, note why not on the rest, proceed.
 - After each push, re-request review and **confirm the new review ran against `HEAD`** before trusting its verdict, reviewers sometimes report against an earlier commit.
-- **Reply on the PR each round** listing what was addressed. Pull feedback via `gh pr view <n> --comments`.
+- **Reply on the PR each round** listing what was addressed.
+- **Pull feedback from all THREE places, not one.** Many reviewers (GitHub's own review UI, most review bots) post their top-level verdict as a PR **review** and their findings as **inline review comments** — and *neither shows up in `--json comments`*, so a watcher that reads only issue comments will miss the actual review and wrongly conclude nothing came back. Pull all three:
+  - top-level verdict + state: `gh pr view <n> --json reviews`
+  - inline line-level findings: `gh api repos/<owner>/<repo>/pulls/<n>/comments`
+  - issue-level comments (trigger acks, bot chatter): `gh pr view <n> --json comments`
+
+  If you poll manually, poll `reviews`, not `comments`.
 - If highs persist after ~6 rounds, stop and ask the user how to proceed.
 
 ## 6. Merge (per the §0 gate)
