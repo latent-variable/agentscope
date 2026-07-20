@@ -1,6 +1,6 @@
 <div align="center">
 
-![agentscope](docs/agentscope.png)
+![One brain. All your agents. — one ~/.agents brain feeds AGENTS.md, skills, and memory to Claude Code, Codex, Antigravity, and Pi](docs/userscope.png)
 
 # agentscope
 
