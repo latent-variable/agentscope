@@ -53,7 +53,7 @@ link_skills(){
 if [ "${1:-}" = "--check" ]; then
   echo "== link check =="
   for p in "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" "$HOME/.gemini/GEMINI.md" \
-           "$HOME/.gemini/AGENTS.md" "$HOME/.pi/agent/AGENTS.md" "$CLAUDE_MEM"; do
+           "$HOME/.pi/agent/AGENTS.md" "$CLAUDE_MEM"; do
     if [ -L "$p" ]; then printf '  OK    %s -> %s\n' "$p" "$(readlink "$p")";
     elif [ -e "$p" ]; then printf '  REAL  %s (not a symlink)\n' "$p";
     else printf '  --    %s (absent)\n' "$p"; fi
@@ -79,7 +79,9 @@ else note "skip Codex (~/.codex absent)"; fi
 # --- Antigravity / Gemini ---
 if have "$HOME/.gemini"; then
   link "$CANON" "$HOME/.gemini/GEMINI.md"
-  link "$CANON" "$HOME/.gemini/AGENTS.md"
+  # NOTE: do NOT also link ~/.gemini/AGENTS.md. Antigravity loads BOTH GEMINI.md and
+  # AGENTS.md from ~/.gemini, so two links to the same canon = the rule counted twice
+  # in the customization budget. GEMINI.md is the native name; one link is enough.
   link_skills "$HOME/.gemini/skills"
 else note "skip Gemini (~/.gemini absent)"; fi
 

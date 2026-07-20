@@ -57,7 +57,7 @@ Want to do it by hand instead? `~/.agents/bin/sync.sh` lays the symlinks; edit `
 |------|----------------------------|--------|--------|
 | Claude Code | `~/.claude/CLAUDE.md` | `~/.claude/skills/*` | `~/.claude/projects/<home>/memory` → `~/.agents/memory` |
 | Codex | `~/.codex/AGENTS.md` | `~/.codex/skills/*` | via AGENTS.md pointer |
-| Antigravity (Gemini) | `~/.gemini/GEMINI.md` + `AGENTS.md` | `~/.gemini/skills/*` | via AGENTS.md pointer |
+| Antigravity (Gemini) | `~/.gemini/GEMINI.md` | `~/.gemini/skills/*` | via AGENTS.md pointer |
 | Pi | `~/.pi/agent/AGENTS.md` | reads `~/.agents/skills/` natively | via AGENTS.md pointer |
 
 `sync.sh` only wires the tools it actually finds. Install a new agent next month, re-run it, done. It's idempotent, so spamming it is harmless.

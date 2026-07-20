@@ -24,7 +24,7 @@ check_symlinks(){
   declare -a links=()
   [ -d "$HOME/.claude" ] && links+=("$HOME/.claude/CLAUDE.md" "$CLAUDE_MEM")
   [ -d "$HOME/.codex" ]  && links+=("$HOME/.codex/AGENTS.md")
-  [ -d "$HOME/.gemini" ] && links+=("$HOME/.gemini/GEMINI.md" "$HOME/.gemini/AGENTS.md")
+  [ -d "$HOME/.gemini" ] && links+=("$HOME/.gemini/GEMINI.md")
   [ -d "$HOME/.pi" ]     && links+=("$HOME/.pi/agent/AGENTS.md")
   if [ "${#links[@]}" -eq 0 ]; then note "  (no known agent CLIs installed yet)"; return; fi
   for p in "${links[@]}"; do
