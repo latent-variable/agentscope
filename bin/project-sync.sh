@@ -114,9 +114,9 @@ cat >> "$AG" <<EOF
 
 ## Agent context (scope + memory)
 $BEGIN
-- You are in **PROJECT scope** (this repo). User-scope canon = \`~/.agents\` and transcends projects — don't conflate them. \`.claude\`/\`.agents\` here may be symlinks; verify with \`readlink\` before claiming a write landed.
+- You are in **PROJECT scope** (this repo). Everything that is true across projects lives in user-scope canon (\`~/.agents/AGENTS.md\` + skills) and is NOT repeated here; this file holds only what is true of THIS repo.
+- \`.claude\`/\`.agents\` here may be symlinks; verify with \`readlink\` before claiming a write landed.
 - Project memory + shared skills: \`.agents/\` (gitignored). Read \`.agents/memory/MEMORY.md\` first.
-- **Commit proactively** (canon doctrine): finished+tested chunk → commit. Commits are free and revertible. Uncommitted / branch-stranded work is invisible to anything that audits the default branch.
 - Refresh infra: \`~/.agents/bin/project-sync.sh .\`
 $END
 EOF

@@ -28,6 +28,34 @@ Two layers. Don't conflate them, conflating them is exactly the bug this skill e
 
 The bridge: Claude stores per-repo memory at `~/.claude/projects/<encoded-cwd>/memory`. Bootstrap symlinks that → `<repo>/.agents/memory`, so Claude's auto-memory and codex/gemini/pi all read+write **one** dir. Encoded path = abs repo path with `/`→`-`.
 
+## What belongs in a repo's AGENTS.md (the no-regurgitation rule)
+
+**A project file states only what is true of THIS repo.** Anything that holds across projects
+already lives in user-scope canon and must NOT be restated here, not even "for convenience".
+
+| Belongs in project scope | Never in project scope (it's canon) |
+|---|---|
+| Commands: build, test, emulator, deploy | The review/merge workflow itself |
+| This repo's architecture, invariants, traps | Commit style, attribution lines |
+| Its ticket board NAME, and gates unique to it | Ticket-board posture, how to write cards |
+| Product decisions an agent must not "fix" | Writing rules, memory rules, delete-safely rules |
+| Named exceptions where this repo genuinely differs | Dependency-audit doctrine, exposure rule |
+
+**A pointer is the maximum.** `Follows the user-scope review-cycle skill. Project gates: <list>` is
+right. Re-summarising what that skill says (branch, validate, PR, severity loop, tiers) is wrong,
+even when the summary is currently accurate.
+
+**Why this is a rule and not a preference: a copy is a fork.** Canon changes; the copies don't.
+Every duplicated line becomes a stale line that quietly contradicts canon, and an agent reading
+the repo obeys the contradiction. Real case: canon flipped ticket boards to agent-managed, and
+three repos still ordered agents to "never mirror work onto the board" three weeks later, because
+the posture had been helpfully pasted into each of them. Same story with a commit-attribution line
+copied into repo commit conventions after canon changed it.
+
+**So when you find canon restated in a repo file, delete it** (docs go straight to main, no ask).
+Do not "update it to match" — that just resets the clock on the same failure. If the repo genuinely
+differs from canon, keep ONE line naming the exception and what it overrides, not the whole topic.
+
 ## The scope-confusion trap (read this)
 
 `.claude`, `.agents`, `CLAUDE.md`, and memory dirs are frequently **symlinks**. Writing one path can land somewhere else; a path existing doesn't mean your write reached the canon. Before claiming "I updated memory / canon":
