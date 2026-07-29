@@ -48,6 +48,7 @@ Want to do it by hand instead? `~/.agents/bin/sync.sh` lays the symlinks; edit `
   bin/sync.sh   # idempotent installer, points each tool's native paths here
   bin/verify.sh # drift detector, flags stale paths so an agent self-corrects
   bin/trello    # optional: read + manage a Trello board from any agent
+  bin/canon-echo.sh # flags canon restated inside a repo, before it goes stale
 ```
 
 **Skills it ships with:** `onboarding` (the setup interview), `remember` (any agent writes a fact, all of them inherit it), `self-correct` (canon repairs itself when reality drifts), `project-scope` (per-repo agent context), `review-cycle` (branch, PR, review, merge), `eli5` (plain-language explanations on demand), `pull-requests`, `draft-response`, `security-audit`.

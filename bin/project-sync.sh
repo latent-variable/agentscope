@@ -117,6 +117,7 @@ $BEGIN
 - You are in **PROJECT scope** (this repo). Everything that is true across projects lives in user-scope canon (\`~/.agents/AGENTS.md\` + skills) and is NOT repeated here; this file holds only what is true of THIS repo.
 - \`.claude\`/\`.agents\` here may be symlinks; verify with \`readlink\` before claiming a write landed.
 - Project memory + shared skills: \`.agents/\` (gitignored). Read \`.agents/memory/MEMORY.md\` first.
+- This file holds project facts only. Check with \`~/.agents/bin/canon-echo.sh .\`; a real exception is marked \`<!-- canon-override: <rule> — <why> (date) -->\`.
 - Refresh infra: \`~/.agents/bin/project-sync.sh .\`
 $END
 EOF
