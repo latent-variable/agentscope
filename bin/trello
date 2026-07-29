@@ -94,14 +94,25 @@ async function cmdBoards() {
   for (const b of boards) console.log(`${b.board.padEnd(20)} ${b.repo.padEnd(45)} ${b.boardId}`);
 }
 
-async function listBoardCards(boardArg) {
+// Fetch a board's cards, with names for its lists and labels. When the caller
+// already knows which column it wants, ask Trello for THAT list's cards instead
+// of the whole board — a mature board is mostly finished work, and pulling all
+// of it to throw most of it away scales with the archive, not the question.
+async function listBoardCards(boardArg, listFilter = null) {
   const auth = loadAuth();
   const board = resolveBoard(boardArg, loadBoards());
   const lists = await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name", cards: "none" });
   const byId = Object.fromEntries(lists.map((l) => [l.id, l.name]));
   const labels = await api("GET", `boards/${board.boardId}/labels`, auth, { fields: "name", limit: 1000 });
   const labelById = Object.fromEntries((labels || []).map((l) => [l.id, l.name]));
-  const cards = await api("GET", `boards/${board.boardId}/cards`, auth, { fields: "name,shortUrl,idList,idLabels" });
+  const fields = "name,shortUrl,idList,idLabels";
+  const wanted = listFilter ? lists.find((l) => l.name.toLowerCase() === String(listFilter).toLowerCase()) : null;
+  // A column name that matches nothing is a typo, not an empty column. Say so
+  // with the board's real column names instead of printing a confusing nothing.
+  if (listFilter && !wanted) die(`no column "${listFilter}" on ${board.board}. Columns: ${lists.map((l) => l.name).join(", ")}`);
+  const cards = wanted
+    ? await api("GET", `lists/${wanted.id}/cards`, auth, { fields })
+    : await api("GET", `boards/${board.boardId}/cards`, auth, { fields });
   return { board, byId, labelById, cards };
 }
 
@@ -121,7 +132,7 @@ async function cmdCards(boardArg, rest = []) {
   const opts = parseFlags(rest);
   const wantAll = rest.includes("--all");
   const only = opts.list ? String(opts.list).toLowerCase() : null;
-  const { board, byId, labelById, cards } = await listBoardCards(boardArg);
+  const { board, byId, labelById, cards } = await listBoardCards(boardArg, opts.list || null);
   console.log(`# ${board.board}  (${board.repo})`);
   const groups = {};
   for (const c of cards) (groups[c.idList] ||= []).push(c);
@@ -141,7 +152,7 @@ async function cmdCards(boardArg, rest = []) {
 async function cmdFind(repoArg, query, rest = []) {
   if (!repoArg) die("usage: trello find <repo> [query] [--list <col>]");
   const opts = parseFlags(rest);
-  const { board, byId, labelById, cards } = await listBoardCards(repoArg);
+  const { board, byId, labelById, cards } = await listBoardCards(repoArg, opts.list || null);
   const q = (query || "").toLowerCase();
   const only = opts.list ? String(opts.list).toLowerCase() : null;
   const hits = cards.filter((c) =>
