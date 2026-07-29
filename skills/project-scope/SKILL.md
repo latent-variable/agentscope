@@ -53,8 +53,55 @@ the posture had been helpfully pasted into each of them. Same story with a commi
 copied into repo commit conventions after canon changed it.
 
 **So when you find canon restated in a repo file, delete it** (docs go straight to main, no ask).
-Do not "update it to match" — that just resets the clock on the same failure. If the repo genuinely
-differs from canon, keep ONE line naming the exception and what it overrides, not the whole topic.
+Do not "update it to match" — that just resets the clock on the same failure.
+
+### When a repo genuinely differs: the override protocol
+
+Sometimes a repo really does need something canon doesn't say, or needs the opposite. That is
+legitimate. What makes it survive is the FORM, because an override written as a paragraph is
+indistinguishable from a copy, and it rots the same way.
+
+An override is **one line of what differs, with the marker above it**:
+
+```markdown
+<!-- canon-override: <which rule> — <why this repo differs> (YYYY-MM-DD) -->
+- Human signs every merge here; the deploy target is regulated.
+```
+
+Rules for it:
+
+- **Name the canon rule you are overriding.** "merge gate", "deploy gating", "writing rules". If you
+  can't name it, you are not overriding anything, you are copying.
+- **State only the delta.** Never restate the rule you are departing from. The reader has canon.
+- **Date it.** An override is a decision at a point in time, and the date is what lets someone later
+  ask whether it still holds.
+- **One line, or two.** If it needs a section, it is probably project design (fine, put it in the
+  architecture part of the file) or it is canon in disguise (delete it).
+
+### The check that catches this for you
+
+`bin/canon-echo.sh [path ...]` greps a repo's agent file for canon restated in it, and names which
+canon file owns each rule. `--list` shows what it looks for. Every pattern in it is a rule that
+actually drifted in the wild. The `canon-override:` marker above a line suppresses it, so the tool
+and the protocol are the same thing.
+
+Run it when you start work in a repo, when you edit that repo's AGENTS.md, and after any canon
+change that touched a rule projects like to repeat. It exits 1 when it finds something, so it drops
+straight into a hook or a nightly sweep.
+
+### Starting a new repo
+
+`bin/project-sync.sh <repo>` wires the scope and writes the managed context block. The repo's own
+AGENTS.md should then carry ONLY these, in this order:
+
+1. **What this project is**, in two or three sentences.
+2. **Commands** an agent needs: build, test, run, deploy.
+3. **Architecture and invariants**, including product decisions an agent must not "fix".
+4. **Traps** this repo has actually hit, with the evidence.
+5. **Overrides**, in the format above, if any. Usually there are none.
+
+If you catch yourself writing the workflow, the commit style, or how to use a tool, stop: that is
+canon, and the sentence you are typing is a future contradiction.
 
 ## The scope-confusion trap (read this)
 
