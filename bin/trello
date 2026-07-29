@@ -1,0 +1,480 @@
+#!/usr/bin/env node
+// Shared Trello CLI for ALL agents (Claude, Codex, agy, Pi), user scope.
+// ---------------------------------------------------------------------------
+// Lets any agent, in any repo, READ a project's board and, WHEN YOU EXPLICITLY
+// POINT IT AT A CARD, comment on it or move it. Credentials go in an OAuth
+// header, never in the URL, so a token never lands in shell history or logs.
+//
+// POSTURE (updated 2026-07-05): agents actively CREATE, MANAGE, and MAINTAIN
+// tickets so the work the fleet actually does is tracked on the board. This
+// supersedes the old one-way "never create cards" rule. What still holds:
+//   * HUMAN tickets outrank agent tickets. add-card stamps an "agent" label so
+//     a human sees card origin at a glance and can prioritize their own.
+//   * Track real units of work, not noise. Create purposeful tickets (a feature,
+//     a bug, a shipped fix); never a card per commit. The nightly daemon still
+//     does not mirror every action; card creation is deliberate.
+//   * Reads are always safe.
+//
+// Auth  : $AGENTS_TRELLO_AUTH  or ~/.agents/secrets/trello-auth.json  ({key,token}, gitignored)
+// Boards: $AGENTS_TRELLO_BOARDS or ~/.agents/trello-boards.json       (repo -> board map)
+// ---------------------------------------------------------------------------
+import { readFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+const HOME = homedir();
+const AUTH_PATH = process.env.AGENTS_TRELLO_AUTH || join(HOME, ".agents/secrets/trello-auth.json");
+const BOARDS_PATH = process.env.AGENTS_TRELLO_BOARDS || join(HOME, ".agents/trello-boards.json");
+
+function die(msg, code = 1) { process.stderr.write(`trello: ${msg}\n`); process.exit(code); }
+
+function loadAuth() {
+  if (!existsSync(AUTH_PATH)) die(`auth file not found: ${AUTH_PATH} (needs {"key","token"})`);
+  const a = JSON.parse(readFileSync(AUTH_PATH, "utf8"));
+  if (!a.key || !a.token) die("auth file missing key/token.");
+  return a;
+}
+
+function loadBoards() {
+  if (!existsSync(BOARDS_PATH)) die(`board map not found: ${BOARDS_PATH}`);
+  const b = JSON.parse(readFileSync(BOARDS_PATH, "utf8"));
+  return b.boards || [];
+}
+
+// Credentials go in the OAuth Authorization header, NOT the query string — a
+// token in the URL leaks into shell history, logs, and process listings.
+async function api(method, path, auth, params = {}) {
+  const url = new URL(`https://api.trello.com/1/${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
+  const res = await fetch(url, {
+    method,
+    headers: { Authorization: `OAuth oauth_consumer_key="${auth.key}", oauth_token="${auth.token}"` }
+  });
+  if (!res.ok) die(`Trello ${method} ${path} -> ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// Match a user token against the board map: board name (ci), boardId, full repo
+// slug, or repo basename. Exact wins; falls back to a unique substring on name.
+function resolveBoard(token, boards) {
+  const t = String(token).toLowerCase();
+  const exact = boards.find((b) =>
+    b.board?.toLowerCase() === t ||
+    b.boardId === token ||
+    b.repo?.toLowerCase() === t ||
+    (b.repo?.split("/").pop() || "").toLowerCase() === t);
+  if (exact) return exact;
+  const partial = boards.filter((b) => b.board?.toLowerCase().includes(t) || b.repo?.toLowerCase().includes(t));
+  if (partial.length === 1) return partial[0];
+  if (partial.length > 1) die(`ambiguous board "${token}": matches ${partial.map((b) => b.board).join(", ")}`);
+  // A raw 24-hex boardId works even before the board is wired into the map, so a
+  // freshly created board can be operated on immediately (create -> add-card).
+  if (/^[0-9a-f]{24}$/i.test(String(token))) return { board: String(token), boardId: String(token), repo: "(unmapped)" };
+  die(`no board matches "${token}". Known: ${boards.map((b) => b.board).join(", ")}`);
+}
+
+// Minimal `--flag value` parser for the write commands (--desc, --list).
+function parseFlags(args = []) {
+  const out = {};
+  for (let i = 0; i < args.length; i++) {
+    if (String(args[i]).startsWith("--")) { out[args[i].slice(2)] = args[i + 1]; i++; }
+  }
+  return out;
+}
+
+// A card ref may be a full URL (…/c/<shortlink>/…), a bare shortlink, or a 24-hex id.
+function cardId(ref) {
+  const m = String(ref).match(/\/c\/([^/]+)/);
+  return m ? m[1] : String(ref);
+}
+
+async function cmdBoards() {
+  const boards = loadBoards();
+  for (const b of boards) console.log(`${b.board.padEnd(20)} ${b.repo.padEnd(45)} ${b.boardId}`);
+}
+
+async function listBoardCards(boardArg) {
+  const auth = loadAuth();
+  const board = resolveBoard(boardArg, loadBoards());
+  const lists = await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name", cards: "none" });
+  const byId = Object.fromEntries(lists.map((l) => [l.id, l.name]));
+  const labels = await api("GET", `boards/${board.boardId}/labels`, auth, { fields: "name", limit: 1000 });
+  const labelById = Object.fromEntries((labels || []).map((l) => [l.id, l.name]));
+  const cards = await api("GET", `boards/${board.boardId}/cards`, auth, { fields: "name,shortUrl,idList,idLabels" });
+  return { board, byId, labelById, cards };
+}
+
+// Render a card's label names as "  [Tag, Tag]" (empty string if none).
+function cardTags(card, labelById) {
+  const tags = (card.idLabels || []).map((id) => labelById[id]).filter(Boolean);
+  return tags.length ? `  [${tags.join(", ")}]` : "";
+}
+
+// A finished column is an ARCHIVE, not working state: on a mature board it is
+// most of the cards and almost never what the caller asked about. Collapse it to
+// a count by default so a routine `cards` call stays cheap in an agent's context.
+const DONE_LIST = /^(done|complete|completed|shipped|archive)$/i;
+
+async function cmdCards(boardArg, rest = []) {
+  if (!boardArg) die("usage: trello cards <board|repo> [--list <col>] [--all]");
+  const opts = parseFlags(rest);
+  const wantAll = rest.includes("--all");
+  const only = opts.list ? String(opts.list).toLowerCase() : null;
+  const { board, byId, labelById, cards } = await listBoardCards(boardArg);
+  console.log(`# ${board.board}  (${board.repo})`);
+  const groups = {};
+  for (const c of cards) (groups[c.idList] ||= []).push(c);
+  // Follow the board's own column order, not the order cards happen to come back.
+  const hidden = [];
+  for (const [idList, name] of Object.entries(byId)) {
+    const cs = groups[idList];
+    if (!cs?.length) continue;
+    if (only && name.toLowerCase() !== only) continue;
+    if (!only && !wantAll && DONE_LIST.test(name)) { hidden.push(`${name} (${cs.length})`); continue; }
+    console.log(`\n## ${name}`);
+    for (const c of cs) console.log(`  ${c.shortUrl}  ${c.name}${cardTags(c, labelById)}`);
+  }
+  if (hidden.length) console.log(`\n# hidden: ${hidden.join(", ")} — finished work. Use --list <col> or --all.`);
+}
+
+async function cmdFind(repoArg, query, rest = []) {
+  if (!repoArg) die("usage: trello find <repo> [query] [--list <col>]");
+  const opts = parseFlags(rest);
+  const { board, byId, labelById, cards } = await listBoardCards(repoArg);
+  const q = (query || "").toLowerCase();
+  const only = opts.list ? String(opts.list).toLowerCase() : null;
+  const hits = cards.filter((c) =>
+    (!q || c.name.toLowerCase().includes(q)) &&
+    (!only || (byId[c.idList] || "").toLowerCase() === only));
+  if (!hits.length) return die(`no cards${q ? ` matching "${query}"` : ""} on ${board.board}`, 0);
+  for (const c of hits) console.log(`${c.shortUrl}  [${byId[c.idList] || "?"}]  ${c.name}${cardTags(c, labelById)}`);
+}
+
+// Read ONE card: the cheap, correct way to get a card's body. Without this an
+// agent falls back to raw API JSON, which is ~2x the tokens of the text it wants
+// and buries the description in fields nobody reads.
+async function cmdShow(ref, rest = []) {
+  if (!ref) die("usage: trello show <cardUrl|id> [--comments N] [--full]");
+  const opts = parseFlags(rest);
+  const full = rest.includes("--full");
+  const nComments = opts.comments != null ? Number(opts.comments) : 3;
+  const auth = loadAuth();
+  const id = cardId(ref);
+  const card = await api("GET", `cards/${id}`, auth, { fields: "name,desc,shortUrl,idList,idLabels,idBoard,dateLastActivity" });
+  const [lists, labels] = await Promise.all([
+    api("GET", `boards/${card.idBoard}/lists`, auth, { fields: "name", cards: "none" }),
+    api("GET", `boards/${card.idBoard}/labels`, auth, { fields: "name", limit: 1000 })
+  ]);
+  const listName = (lists.find((l) => l.id === card.idList) || {}).name || "?";
+  const labelById = Object.fromEntries((labels || []).map((l) => [l.id, l.name]));
+  console.log(`# ${card.name}`);
+  console.log(`${card.shortUrl}  [${listName}]${cardTags(card, labelById)}  last activity ${String(card.dateLastActivity).slice(0, 10)}`);
+  const desc = card.desc || "(no description)";
+  const DESC_CAP = 6000;
+  console.log(`\n## Description\n${full || desc.length <= DESC_CAP ? desc : `${desc.slice(0, DESC_CAP)}\n… +${desc.length - DESC_CAP} chars (--full)`}`);
+  if (nComments <= 0) return;
+  const acts = await api("GET", `cards/${id}/actions`, auth, { filter: "commentCard", limit: Math.min(nComments, 50) });
+  if (!acts?.length) return console.log(`\n## Comments\n(none)`);
+  console.log(`\n## Comments (newest ${acts.length})`);
+  const CAP = 1200;
+  for (const a of acts) {
+    const t = a.data?.text || "";
+    const body = full || t.length <= CAP ? t : `${t.slice(0, CAP)}\n… +${t.length - CAP} chars (--full)`;
+    console.log(`\n--- ${a.memberCreator?.username || "?"}  ${String(a.date).slice(0, 10)}\n${body}`);
+  }
+}
+
+async function cmdComment(ref, textParts) {
+  if (!ref || !textParts.length) die('usage: trello comment <cardUrl|id> "<text>"');
+  const auth = loadAuth();
+  await api("POST", `cards/${cardId(ref)}/actions/comments`, auth, { text: textParts.join(" ") });
+  console.log(`commented on ${ref}`);
+}
+
+// Move a card to a list. Within its own board by default; pass a target board to
+// TRANSFER it there (Trello needs idBoard + idList for a cross-board move).
+async function cmdMove(ref, listName, boardArg) {
+  if (!ref || !listName) die("usage: trello move <cardUrl|id> <listName> [targetBoard]");
+  const auth = loadAuth();
+  const id = cardId(ref);
+  const card = await api("GET", `cards/${id}`, auth, { fields: "idBoard,name" });
+  let boardId = card.idBoard;
+  if (boardArg) boardId = resolveBoard(boardArg, loadBoards()).boardId;
+  const lists = await api("GET", `boards/${boardId}/lists`, auth, { fields: "name" });
+  const target = lists.find((l) => l.name.toLowerCase() === listName.toLowerCase());
+  if (!target) die(`no list "${listName}" on ${boardArg || "this board"}. Lists: ${lists.map((l) => l.name).join(", ")}`);
+  const params = { idList: target.id };
+  if (boardArg && boardId !== card.idBoard) params.idBoard = boardId;
+  // Completion belongs at the TOP so newest-done stays visible.
+  if (/done|complete/i.test(listName)) params.pos = "top";
+  await api("PUT", `cards/${id}`, auth, params);
+  console.log(`moved "${card.name}" -> ${target.name}${boardArg ? ` @ ${boardArg}` : ""}`);
+}
+
+// The user-scope BOARD STANDARD: the columns every board is expected to have, in
+// order. This constant is the single source of truth for the standard; the trello
+// skill documents it in prose. Per-project extra columns are allowed and are NOT
+// touched by `standardize` (it only ensures these exist + canonical-names known
+// aliases; it never archives a board's own extra lists).
+const STANDARD_LISTS = ["Backlog", "Ready for Agent", "In Progress", "Testing", "Complete"];
+// Known legacy names that map onto a standard column (renamed only when the
+// canonical name isn't already present, so we never create a duplicate).
+const LIST_ALIASES = {
+  "In Progress": ["doing", "in-progress", "wip"],
+  "Complete": ["done", "completed", "shipped"],
+  "Testing": ["testing/reviewing", "review", "reviewing", "qa"]
+};
+
+async function cmdLists(boardArg) {
+  if (!boardArg) die("usage: trello lists <board|repo>");
+  const auth = loadAuth();
+  const board = resolveBoard(boardArg, loadBoards());
+  const lists = await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name" });
+  console.log(`# ${board.board}`);
+  for (const l of lists) console.log(`  ${l.name}`);
+}
+
+async function cmdAddList(boardArg, name) {
+  if (!boardArg || !name) die("usage: trello add-list <board|repo> <name>");
+  const auth = loadAuth();
+  const board = resolveBoard(boardArg, loadBoards());
+  const exists = (await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name" }))
+    .some((l) => l.name.toLowerCase() === name.toLowerCase());
+  if (exists) return console.log(`"${name}" already exists on ${board.board}`);
+  await api("POST", "lists", auth, { name, idBoard: board.boardId, pos: "bottom" });
+  console.log(`added "${name}" to ${board.board}`);
+}
+
+async function cmdRenameList(boardArg, oldName, newName) {
+  if (!boardArg || !oldName || !newName) die("usage: trello rename-list <board|repo> <old> <new>");
+  const auth = loadAuth();
+  const board = resolveBoard(boardArg, loadBoards());
+  const lists = await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name" });
+  const l = lists.find((x) => x.name.toLowerCase() === oldName.toLowerCase());
+  if (!l) die(`no list "${oldName}" on ${board.board}. Lists: ${lists.map((x) => x.name).join(", ")}`);
+  await api("PUT", `lists/${l.id}`, auth, { name: newName });
+  console.log(`renamed "${l.name}" -> "${newName}" on ${board.board}`);
+}
+
+// Archive (Trello "close") a list. Reversible in the Trello UI; cards on it are
+// archived with it, so archive only lists you've emptied or truly want gone.
+async function cmdArchiveList(boardArg, name) {
+  if (!boardArg || !name) die("usage: trello archive-list <board|repo> <name>");
+  const auth = loadAuth();
+  const board = resolveBoard(boardArg, loadBoards());
+  const lists = await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name" });
+  const l = lists.find((x) => x.name.toLowerCase() === name.toLowerCase());
+  if (!l) die(`no list "${name}" on ${board.board}. Lists: ${lists.map((x) => x.name).join(", ")}`);
+  await api("PUT", `lists/${l.id}/closed`, auth, { value: "true" });
+  console.log(`archived "${l.name}" on ${board.board}`);
+}
+
+// Bring a board up to the user-scope standard: ensure every STANDARD_LISTS column
+// exists (rename a known alias if present, else create), then order the standard
+// columns left-to-right. Additive and non-destructive: a board's own extra lists
+// are left untouched. Idempotent.
+async function cmdStandardize(boardArg) {
+  if (!boardArg) die("usage: trello standardize <board|repo>");
+  const auth = loadAuth();
+  const board = resolveBoard(boardArg, loadBoards());
+  let lists = await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name" });
+  const has = (n) => lists.find((l) => l.name.toLowerCase() === n.toLowerCase());
+  for (const canon of STANDARD_LISTS) {
+    if (has(canon)) { console.log(`  ok       ${canon}`); continue; }
+    const alias = lists.find((l) => (LIST_ALIASES[canon] || []).includes(l.name.toLowerCase()));
+    if (alias) {
+      await api("PUT", `lists/${alias.id}`, auth, { name: canon });
+      console.log(`  renamed  ${alias.name} -> ${canon}`);
+    } else {
+      await api("POST", "lists", auth, { name: canon, idBoard: board.boardId, pos: "bottom" });
+      console.log(`  created  ${canon}`);
+    }
+    lists = await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name" });
+  }
+  // Order the standard columns to the front, left-to-right. Moving each to "top"
+  // in REVERSE canonical order is deterministic (numeric pos values get reshuffled
+  // by Trello); it also leaves any extra lists after the standard block, in order.
+  lists = await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name" });
+  for (const canon of [...STANDARD_LISTS].reverse()) {
+    const l = has(canon);
+    if (l) await api("PUT", `lists/${l.id}`, auth, { pos: "top" });
+  }
+  console.log(`standardized ${board.board}: ${STANDARD_LISTS.join(" | ")}`);
+}
+
+// Stand up a NEW board with the standard columns. Created with no default lists,
+// then STANDARD_LISTS are laid down left-to-right. Does NOT wire the board into
+// the map — add it to ~/.agents/trello-boards.json yourself so `trello <repo>`
+// can resolve it by name.
+async function cmdCreateBoard(name, rest) {
+  if (!name) die('usage: trello create-board "<name>" [--desc <text>]');
+  const auth = loadAuth();
+  const opts = parseFlags(rest);
+  const board = await api("POST", "boards", auth, {
+    name,
+    defaultLists: "false",
+    ...(opts.desc ? { desc: opts.desc } : {})
+  });
+  for (const canon of STANDARD_LISTS) {
+    await api("POST", "lists", auth, { name: canon, idBoard: board.id, pos: "bottom" });
+  }
+  console.log(`created board "${name}"`);
+  console.log(`  id:      ${board.id}`);
+  console.log(`  url:     ${board.shortUrl}`);
+  console.log(`  columns: ${STANDARD_LISTS.join(" | ")}`);
+  console.log(`  wire it: add {"board","repo","boardId"} to ~/.agents/trello-boards.json`);
+}
+
+// Find-or-create a board label by name (case-insensitive), returning its id.
+// Color is only applied when CREATING; an existing label keeps its color.
+async function findOrCreateLabel(boardId, name, auth, color = "blue") {
+  const labels = await api("GET", `boards/${boardId}/labels`, auth, { fields: "name", limit: 1000 });
+  const found = (labels || []).find((l) => (l.name || "").toLowerCase() === name.toLowerCase());
+  if (found) return found.id;
+  const made = await api("POST", "labels", auth, { name, color, idBoard: boardId });
+  return made.id;
+}
+
+// Create a card. Agents own ticket creation now; every agent-made card carries
+// the "agent" label. Default column is Backlog (human triage) unless --list
+// picks another. Track real units of work, not per-commit noise.
+async function cmdAddCard(boardArg, title, rest) {
+  if (!boardArg || !title) die('usage: trello add-card <board|repo> "<title>" [--desc <text>] [--list <column>]');
+  const auth = loadAuth();
+  const opts = parseFlags(rest);
+  const board = resolveBoard(boardArg, loadBoards());
+  const listName = opts.list || "Backlog";
+  const lists = await api("GET", `boards/${board.boardId}/lists`, auth, { fields: "name" });
+  const target = lists.find((l) => l.name.toLowerCase() === listName.toLowerCase());
+  if (!target) die(`no list "${listName}" on ${board.board}. Lists: ${lists.map((l) => l.name).join(", ")}`);
+  const idLabels = await findOrCreateLabel(board.boardId, "agent", auth, "purple");
+  const card = await api("POST", "cards", auth, {
+    name: title,
+    idList: target.id,
+    idLabels,
+    // Completed work lands at the TOP of Complete so newest-done stays visible.
+    pos: /done|complete/i.test(listName) ? "top" : "bottom",
+    ...(opts.desc ? { desc: opts.desc } : {})
+  });
+  console.log(`added [agent] "${title}" -> ${target.name} on ${board.board}`);
+  console.log(`  ${card.shortUrl}`);
+}
+
+// Edit a card's title and/or description. Board maintenance: fix a title, flesh
+// out a description as work progresses.
+async function cmdEditCard(ref, rest) {
+  if (!ref) die('usage: trello edit-card <cardUrl|id> [--title "<t>"] [--desc "<t>"]');
+  const auth = loadAuth();
+  const opts = parseFlags(rest);
+  const params = {};
+  if (opts.title !== undefined) params.name = opts.title;
+  if (opts.desc !== undefined) params.desc = opts.desc;
+  if (!Object.keys(params).length) die("edit-card: pass --title and/or --desc");
+  const card = await api("PUT", `cards/${cardId(ref)}`, auth, params);
+  console.log(`edited "${card.name}"`);
+}
+
+// Archive (Trello "close") a card. Reversible from the Trello UI; use it to clear
+// a card that no longer reflects real work.
+async function cmdArchiveCard(ref) {
+  if (!ref) die("usage: trello archive-card <cardUrl|id>");
+  const auth = loadAuth();
+  const card = await api("PUT", `cards/${cardId(ref)}`, auth, { closed: "true" });
+  console.log(`archived "${card.name}"`);
+}
+
+// List a board's labels: color, name, and how many cards use each. Read-only.
+async function cmdLabels(boardArg) {
+  if (!boardArg) die("usage: trello labels <board|repo>");
+  const auth = loadAuth();
+  const board = resolveBoard(boardArg, loadBoards());
+  const labels = await api("GET", `boards/${board.boardId}/labels`, auth, { fields: "name,color,uses", limit: 1000 });
+  console.log(`# ${board.board} labels`);
+  for (const l of labels) {
+    console.log(`  ${String(l.color || "none").padEnd(8)} ${(l.name || "(unnamed)").padEnd(28)} ${l.uses != null ? `${l.uses} use(s)` : ""}`);
+  }
+}
+
+// Add a label to a card by NAME (find-or-create on the card's board). A new
+// label takes --color (Trello: green/yellow/orange/red/purple/blue/sky/lime/
+// pink/black), default blue. Use for guidance labels (priority/type) and feature
+// tags that group cards under a major area.
+async function cmdLabel(ref, name, rest) {
+  if (!ref || !name) die('usage: trello label <cardUrl|id> <labelName> [--color <c>]');
+  const auth = loadAuth();
+  const opts = parseFlags(rest);
+  const id = cardId(ref);
+  const card = await api("GET", `cards/${id}`, auth, { fields: "idBoard,name" });
+  const labelId = await findOrCreateLabel(card.idBoard, name, auth, opts.color || "blue");
+  await api("POST", `cards/${id}/idLabels`, auth, { value: labelId });
+  console.log(`labeled "${card.name}" +${name}`);
+}
+
+// Remove a label from a card by name (the label itself stays on the board).
+async function cmdUnlabel(ref, name) {
+  if (!ref || !name) die("usage: trello unlabel <cardUrl|id> <labelName>");
+  const auth = loadAuth();
+  const id = cardId(ref);
+  const card = await api("GET", `cards/${id}`, auth, { fields: "idBoard,name" });
+  const labels = await api("GET", `boards/${card.idBoard}/labels`, auth, { fields: "name", limit: 1000 });
+  const l = labels.find((x) => (x.name || "").toLowerCase() === name.toLowerCase());
+  if (!l) die(`no label "${name}" on this board`);
+  await api("DELETE", `cards/${id}/idLabels/${l.id}`, auth);
+  console.log(`unlabeled "${card.name}" -${name}`);
+}
+
+const USAGE = `trello — shared Trello CLI for all agents
+
+Cards (agents create/manage tickets; human tickets outrank agent ones):
+  trello boards                       list configured repo -> board map
+  trello cards <board|repo> [--list <col>] [--all]   cards by column; finished column collapsed to a count
+  trello find  <repo> [query] [--list <col>]         find cards by name (cheapest way in)
+  trello show  <cardUrl|id> [--comments N] [--full]  ONE card: description + newest comments as text
+  trello add-card <board> "<title>" [--desc <t>] [--list <col>]  create a card (marked 'agent')
+  trello edit-card <cardUrl|id> [--title <t>] [--desc <t>]  edit a card's title/description
+  trello archive-card <cardUrl|id>    archive a card (reversible in the UI)
+  trello labels <board|repo>          list a board's labels (color, name, use count)
+  trello label <cardUrl|id> <name> [--color <c>]  add a label to a card (creates it if new)
+  trello unlabel <cardUrl|id> <name>  remove a label from a card
+  trello comment <cardUrl|id> "text"  add a comment to a specific card
+  trello move    <cardUrl|id> <list> [board]  move to a list; pass a board to transfer across boards
+
+Board management:
+  trello create-board "<name>" [--desc <t>]   create a board with the standard columns
+  trello lists <board|repo>           list a board's columns
+  trello add-list <board> <name>      add a column
+  trello rename-list <board> <o> <n>  rename a column
+  trello archive-list <board> <name>  archive an (emptied) column
+  trello standardize <board|repo>     ensure the standard columns (${STANDARD_LISTS.join(", ")})
+
+Board/repo accepts a board name, boardId, repo slug, or repo basename.
+Card ref accepts a card URL, its shortlink, or its id.`;
+
+async function main() {
+  const [cmd, ...rest] = process.argv.slice(2);
+  switch (cmd) {
+    case "boards": return cmdBoards();
+    case "cards": return cmdCards(rest[0], rest.slice(1));
+    case "find": return cmdFind(rest[0], rest[1]?.startsWith("--") ? "" : rest[1], rest.slice(1));
+    case "show": return cmdShow(rest[0], rest.slice(1));
+    case "add-card": return cmdAddCard(rest[0], rest[1], rest.slice(2));
+    case "edit-card": return cmdEditCard(rest[0], rest.slice(1));
+    case "archive-card": return cmdArchiveCard(rest[0]);
+    case "labels": return cmdLabels(rest[0]);
+    case "label": return cmdLabel(rest[0], rest[1], rest.slice(2));
+    case "unlabel": return cmdUnlabel(rest[0], rest[1]);
+    case "comment": return cmdComment(rest[0], rest.slice(1));
+    case "move": return cmdMove(rest[0], rest[1], rest[2]);
+    case "create-board": return cmdCreateBoard(rest[0], rest.slice(1));
+    case "lists": return cmdLists(rest[0]);
+    case "add-list": return cmdAddList(rest[0], rest[1]);
+    case "rename-list": return cmdRenameList(rest[0], rest[1], rest[2]);
+    case "archive-list": return cmdArchiveList(rest[0], rest[1]);
+    case "standardize": return cmdStandardize(rest[0]);
+    case undefined: case "-h": case "--help": case "help": console.log(USAGE); return;
+    default: die(`unknown command "${cmd}"\n\n${USAGE}`);
+  }
+}
+
+main().catch((e) => die(e?.message || String(e)));

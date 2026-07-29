@@ -17,6 +17,7 @@ Every repo follows this. Don't copy-paste it into each project's `AGENTS.md` (it
 The point is to ship with high confidence **without waiting on the user**. Match the gate to the risk:
 
 - **Docs / config-only** (`AGENTS.md`, `README`, comments, non-functional config): **commit straight to `main`. No branch, no PR.** These encode the user's own instructions; gating them wastes time.
+  **Land it in the same turn: commit AND push to `main`.** A doc fix parked on a branch, or waiting on an OK you already have standing for, is a fix that does not exist. Same for canon-consistency work (deleting a stale line from a repo, syncing a managed block): it goes straight to `main` in every repo it touches. If you happened to start on a branch, push it to `main` anyway rather than opening a PR for docs.
 - **Code changes:** run the full cycle below, then **merge to `main` autonomously when all three hold:**
   1. **Genuinely self-validated end-to-end.** You actually exercised the path that changed, not just "it compiles." If you *cannot* truly end-to-end validate it, **don't self-merge, escalate to the user.** This is the load-bearing condition.
   2. **Tests green**, and you added/updated tests per the Testing bar (§2) for what you changed.

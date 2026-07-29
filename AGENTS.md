@@ -6,6 +6,7 @@ This is the single source of truth. Every tool's global instruction file symlink
 - **Skills** (reusable "how to do X"): `~/.agents/skills/`, load on demand by name.
 - **Memory** (durable facts about me + my work): `~/.agents/memory/`, read `MEMORY.md` first, it indexes the rest.
 - **Re-sync wiring** after adding a tool: `~/.agents/bin/sync.sh`.
+- **Trello** (optional, any agent, any repo): the shared `trello` CLI (`~/.agents/bin/trello`) reads and actively manages a project's board. Agents create, comment, move, and maintain tickets for real units of work (agent-made cards carry an "agent" label; human tickets outrank them). **A card's DESCRIPTION is written for the agent that will do the work, so detail is welcome; a COMMENT is a status update a human reads, so keep it to a few lines.** Load the **`trello`** skill when a card, board, or ticket comes up. Needs your own Trello key/token, see the skill.
 
 > **New here?** This file ships as a **template**. The `{{double-brace}}` blocks below are unfilled.
 > Tell your agent **"onboard me with agentscope"** (or run the **`onboarding`** skill) and it will interview
