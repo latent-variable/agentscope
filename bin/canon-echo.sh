@@ -52,9 +52,19 @@ scan_file(){
     # -n gives line numbers so the override marker can be checked on the line above.
     while IFS=: read -r lineno text; do
       [ -z "${lineno:-}" ] && continue
-      local prev=""
+      local prev="" marked=""
       [ "$lineno" -gt 1 ] && prev=$(sed -n "$((lineno - 1))p" "$f")
-      case "$prev" in *canon-override:*) continue ;; esac
+      # An override names ONE rule. It must not silently cover a different rule
+      # that happens to match the same line — that is how an override quietly
+      # becomes a blanket exemption.
+      case "$prev" in
+        *canon-override:*)
+          marked=$(printf '%s' "$prev" | sed -E 's/.*canon-override:[[:space:]]*//; s/[[:space:]]*[-—].*//' | tr '[:upper:]' '[:lower:]')
+          case "$(printf '%s' "$what" | tr '[:upper:]' '[:lower:]')" in
+            *"$marked"*) continue ;;
+          esac
+          ;;
+      esac
       printf '%s:%s  [%s]\n' "$rel" "$lineno" "$what"
       printf '    %s\n' "$(printf '%s' "$text" | cut -c1-100)"
       printf '    owned by: %s — delete it here, or mark it an override.\n' "$owner"
@@ -66,6 +76,12 @@ scan_file(){
   done <<< "$RULES"
 }
 
+# BSD (macOS) formats with `stat -f`, GNU with `stat -c`. Probe once: on GNU,
+# `stat -f '%d:%i' .` treats the format as a missing FILE and fails, so this
+# lands on -c. Doing it inline with `||` merged both outputs into one id.
+if stat -f '%d:%i' . >/dev/null 2>&1; then stat_id(){ stat -f '%d:%i' "$1" 2>/dev/null; }
+else stat_id(){ stat -c '%d:%i' "$1" 2>/dev/null; }; fi
+
 seen=""
 for target in "${@:-.}"; do
   for name in AGENTS.md CLAUDE.md Agents.md; do
@@ -74,7 +90,7 @@ for target in "${@:-.}"; do
     [ -f "$f" ] && [ ! -L "$f" ] || continue
     # macOS filesystems are case-insensitive, so AGENTS.md and Agents.md can be
     # the SAME file. Dedupe on device+inode, not on the name we happened to try.
-    id=$(stat -f '%d:%i' "$f" 2>/dev/null || stat -c '%d:%i' "$f" 2>/dev/null)
+    id=$(stat_id "$f")
     case " $seen " in *" $id "*) continue ;; esac
     seen="$seen $id"
     scan_file "$f" "${target#./}/$name"
