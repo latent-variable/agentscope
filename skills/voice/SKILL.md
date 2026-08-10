@@ -100,9 +100,9 @@ not eyeball. The recipe that produced the current numbers:
 
 ```bash
 python3 - <<'PY'
-import json,glob,re,statistics
+import json,glob,os,re,statistics
 msgs=[]
-for f in glob.glob('/Users/linovaldovinos/.claude/projects/**/*.jsonl',recursive=True):
+for f in glob.glob(os.path.expanduser('~/.claude/projects/**/*.jsonl'),recursive=True):
     for line in open(f,errors='ignore'):
         try: d=json.loads(line)
         except: continue
