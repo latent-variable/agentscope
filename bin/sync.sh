@@ -42,7 +42,17 @@ link_skills(){
   for l in "$dir"/*; do
     [ -L "$l" ] || continue
     tgt="$(readlink "$l")"
-    case "$tgt" in "$SKILLS"/*) [ -e "$l" ] || { rm "$l"; note "prune   dead link $(basename "$l")"; };; esac
+    # trash, not rm: canon defaults to recoverable deletes with no exemptions,
+    # and "it's only a broken symlink" is exactly the reasoning that erodes it.
+    # Report what actually happened: swallowing the failure and printing "prune"
+    # anyway leaves a dead link in place while the log says it is gone, which is
+    # worse than not pruning at all.
+    case "$tgt" in "$SKILLS"/*)
+      [ -e "$l" ] || {
+        if trash "$l" 2>/dev/null; then note "prune   dead link $(basename "$l")"
+        else note "WARN    could not prune dead link $(basename "$l") (trash failed); remove it by hand"; fi
+      };;
+    esac
   done
   for s in "$SKILLS"/*/; do
     [ -d "$s" ] || continue

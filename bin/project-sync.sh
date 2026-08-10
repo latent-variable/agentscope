@@ -102,13 +102,19 @@ AG="$REPO/AGENTS.md"; touch "$AG"
 BEGIN='<!-- BEGIN agent-context (managed by ~/.agents/bin/project-sync.sh) -->'
 END='<!-- END agent-context -->'
 had=0; grep -qF 'Agent context (scope + memory)' "$AG" && had=1
-# Write THROUGH the file (cat redirect), never `mv` over it — some repos keep AGENTS.md as a
-# symlink to CLAUDE.md (single source); `mv` would replace the symlink with a real file.
+# Drop any prior managed block. Old format (no END marker) was appended last → skip heading→EOF.
+# New format is delimited by END → stop skipping there. Triggering on the heading handles both.
+# Write THROUGH the file (cat redirect), never `mv` over it — some repos keep
+# AGENTS.md as a symlink to CLAUDE.md (single source); `mv` would replace the
+# symlink with a real file and diverge the twin. `cat >` follows the link.
 awk '
   /^## Agent context \(scope \+ memory\)/ {skip=1}
   /END agent-context/ {skip=0; next}
   skip==0 {print}
-' "$AG" > "$AG.strip.tmp" && cat "$AG.strip.tmp" > "$AG" && rm -f "$AG.strip.tmp"
+' "$AG" > "$AG.strip.tmp" && cat "$AG.strip.tmp" > "$AG" \
+    && { [ -f "$AG.strip.tmp" ] && { trash "$AG.strip.tmp" 2>/dev/null \
+         || echo "  WARN  left $AG.strip.tmp behind (trash failed); remove it by hand" >&2; }; true; }
+# Trim trailing blank lines, then append fresh block.
 printf '%s\n' "$(cat "$AG")" > "$AG"
 cat >> "$AG" <<EOF
 
