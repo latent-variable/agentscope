@@ -1,14 +1,14 @@
 ---
 name: onboarding
 description: >
-  First-run setup for agentscope. Interview the user, fill the AGENTS.md template + memory with their
+  First-run setup for userscope. Interview the user, fill the AGENTS.md template + memory with their
   identity and preferences, detect which agent CLIs are installed, wire them all to ~/.agents, and tune
   optional features (ELI5 explanations, the Speak-to-me TTS block, the review-cycle workflow). Run this
-  the first time someone clones agentscope, or when they say "onboard me" / "set up agentscope".
+  the first time someone clones userscope, or when they say "onboard me" / "set up userscope".
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 ---
 
-# Onboard a new user to agentscope
+# Onboard a new user to userscope
 
 Goal: turn the shipped **template** into *this person's* user-scope brain, and wire every agent CLI on their
 machine to it. After this, every tool (Claude, Codex, Gemini/Antigravity, Pi) reads the same identity,
