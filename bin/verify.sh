@@ -62,10 +62,23 @@ check_paths(){
   # Match ~/... and $HOME/... references in canon markdown; skip {{placeholders}} and globs.
   paths=$($GREP_MD '(~|'"$HOME"')/[A-Za-z0-9._/-]+' "$AGENTS" 2>/dev/null \
           | sed "s#^~#$HOME#; s#[.,]*\$##" | sort -u)
+  # Paths canon names on purpose while they must NOT exist (a retired repo, a
+  # cautionary example). Without this they flag forever, and permanent noise
+  # teaches everyone to ignore real drift. One path per line, # for comments.
+  local ignore="$AGENTS/.verify-ignore-paths" skip
   while IFS= read -r p; do
     [ -z "$p" ] && continue
     case "$p" in *'<'*|*'*'*|*'{{'*|*'}}'*) continue;; esac     # skip placeholders/globs
     [ "$p" = "$AGENTS" ] && continue
+    skip=0
+    if [ -f "$ignore" ]; then
+      while IFS= read -r ig; do
+        case "$ig" in ''|'#'*) continue;; esac
+        ig="${ig/#\~/$HOME}"; ig="${ig%/}"
+        [ "${p%/}" = "$ig" ] && { skip=1; break; }
+      done < "$ignore"
+    fi
+    [ "$skip" = 1 ] && continue
     if [ -e "$p" ]; then okc=$((okc+1)); else flag "path not found: $p"; fi
   done <<< "$paths"
   note "  $okc referenced paths exist"
@@ -91,7 +104,16 @@ check_repos(){
 check_git(){
   echo "-- git state --"
   if git -C "$AGENTS" rev-parse --git-dir >/dev/null 2>&1; then
-    [ -n "$(git -C "$AGENTS" status --porcelain)" ] && note "  uncommitted changes present"
+    # autopush.sh only auto-commits the append-only surface (memory/, generated
+    # caches). Anything else it HOLDS, so "autopush will ship them" is false for
+    # exactly the changes that matter most. Say which case this is.
+    if [ -n "$(git -C "$AGENTS" status --porcelain)" ]; then
+      if [ -n "$(git -C "$AGENTS" status --porcelain | grep -Ev '^.. (memory/|trello-boards\.json)')" ]; then
+        note "  uncommitted changes present — autopush will NOT commit these, do it yourself"
+      else
+        note "  uncommitted changes present (append-only; autopush will back them up)"
+      fi
+    fi
     git -C "$AGENTS" fetch -q origin 2>/dev/null || true
     local ahead; ahead=$(git -C "$AGENTS" rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)
     [ "${ahead:-0}" -gt 0 ] && note "  $ahead local commit(s) not pushed"
