@@ -212,7 +212,7 @@ cd ~/.agents && git add -A && git commit -m "fix: <what drifted>" && git push
 
 If a fix touches `bin/` or `tests/` (real code), that is the review cycle's
 territory: branch, validate, PR, automated review, merge. Note that
-`autopush.sh` will **not** commit those for you, by design.
+Commit them yourself; nothing else is going to.
 
 ## Report
 

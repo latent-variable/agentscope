@@ -3,7 +3,7 @@ name: onboarding
 description: >
   First-run setup for userscope. Interview the user, fill the AGENTS.md template + memory with their
   identity and preferences, detect which agent CLIs are installed, wire them all to ~/.agents, and tune
-  optional features (ELI5 explanations, the Speak-to-me TTS block, the review-cycle workflow). Run this
+  optional features (plain-language explanations, the Speak-to-me TTS block). Run this
   the first time someone clones userscope, or when they say "onboard me" / "set up userscope".
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 ---
@@ -38,8 +38,7 @@ Ask these, adapting to what they volunteer. Don't interrogate; one message with 
 2. **Where does your work live?** Top project directories (e.g. `~/Documents/...`, `~/Code/...`) + GitHub handle. (→ "Where my work lives")
 3. **Explanation style, do you want ELI5?** Plain-language analogies layered on top of full technical substance, or straight technical only? (→ keeps/strips the ELI5 line)
 4. **Spoken summaries?** Do you use (or want) text-to-speech reading a short "here's what I did" at the end of each reply? (→ keeps/strips the **🔊 Speak to me** block). If yes and they're on **macOS**, mention **Yap** (`github.com/latent-variable/Yap`), local-first on-device TTS+STT built for this, and offer to help install it (§4).
-5. **Workflow, structured review cycle?** Do you want agents to branch / open PRs / run automated review before merging code, or keep it lightweight? (→ keeps/strips the review-cycle bullet)
-6. **Attribution name** for commits (defaults to "Claude" / the agent's own name + model id). Most people keep the default.
+5. **Attribution name** for commits (defaults to "Claude" / the agent's own name + model id). Most people keep the default.
 
 ## 2. Fill the template
 
@@ -49,7 +48,6 @@ Edit `~/.agents/AGENTS.md`, replace every `{{...}}` block:
 - `{{BIO ...}}` → the one-paragraph bio.
 - `{{PROJECT_DIRS ...}}` → their actual dirs + `GitHub: <handle>`.
 - `{{ELI5_TOGGLE ...}}` → if yes, replace with the literal sentence: `Use ELI5 framing when explaining: concrete analogies and everyday objects, full technical substance kept.` If no, delete the toggle text (leave the surrounding sentence clean).
-- `{{REVIEW_TOGGLE ...}}` → if they want it, delete just the brace note (keep the bullet). If not, delete the whole review-cycle bullet.
 
 **Speak-to-me block** (between `<!-- BEGIN speak-to-me -->` and `<!-- END speak-to-me -->`):
 - TTS **yes** → keep the block; delete the two HTML comment markers so it reads clean. Keep the Yap pointer only on macOS.
@@ -100,5 +98,5 @@ cd ~/.agents && git add -A && git commit -m "onboarding: my user scope" && git p
 ```
 
 Then a short confirmation: who you recorded them as, which CLIs you wired, which optional features are on
-(ELI5, Speak-to-me, review-cycle), and the two things they control going forward, edit `AGENTS.md` for global behavior, drop facts via the `remember` skill. Point them at the other skills
+(plain-language explanations, Speak-to-me), and the two things they control going forward, edit `AGENTS.md` for global behavior, drop facts via the `remember` skill. Point them at the other skills
 by name so they know what's available.

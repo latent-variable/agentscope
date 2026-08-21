@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+"""Find the two things that make shared canon rot: DUPLICATION and CONFLICT.
+
+WHY: canon is written down three or four times in different languages (prose in
+AGENTS.md, a step in a skill, a fact in memory). Every restatement is a fork —
+canon moves, the copy does not, and an agent reading the copy obeys the stale
+one. Nothing was measuring that, so it accumulated: a first run on a real canon
+base found 27 cross-file near-duplicate passages, plus a rule-level contradiction
+where AGENTS.md stated a rule as absolute and a skill restated it as conditional.
+
+The two halves need different instruments, which is why one pass is not enough:
+
+  DUPES     the same text in two files. Lexical, caught by shingle overlap.
+  CONFLICTS the OPPOSITE rule about the same subject. Lexically these look
+            nothing alike, so overlap scores zero and a dupe scan sails past
+            them. Caught instead by topic + opposing modality.
+
+Neither is a verdict. A verbatim quote of the user can legitimately live in both
+AGENTS.md and a memory file, and a repo may legitimately restate a rule it
+overrides. This tool points; you judge.
+
+Usage:
+  canon-dupe                     # ~/.agents: both passes
+  canon-dupe --dupes             # duplication only
+  canon-dupe --conflicts         # contradiction only
+  canon-dupe --min 0.45          # raise the duplication threshold
+  canon-dupe <dir> [...]         # scan somewhere else (a repo, say)
+
+Exit 0 = nothing above threshold, 1 = findings.
+"""
+import collections
+import itertools
+import os
+import pathlib
+import re
+import sys
+
+# A rule and its opposite, keyed by subject. Each entry is (name, pattern).
+# These are MODALITY markers: how absolute a rule claims to be. A pair of
+# sentences about the same subject where one is absolute and the other is
+# conditional is the exact shape of the worktree contradiction.
+ABSOLUTE = re.compile(
+    r"\b(always|never|every time|must not|must be|no exceptions?|"
+    r"in every|under no circumstances|without exception|required)\b", re.I)
+CONDITIONAL = re.compile(
+    r"\b(only when|only if|when needed|if needed|where needed|optional(?:ly)?|"
+    r"sometimes|may (?:be )?(?:use|skip|omit)|prefer(?:red)?|by default|"
+    r"default(?:s)? to|unless|as needed|when it makes sense)\b", re.I)
+
+# Words too common to identify a subject. Anything left is topical enough that
+# two sentences containing it are probably about the same thing.
+STOP = set("""a about above after again against all also am an and any are as at be because been
+before being below between both but by can cannot could did do does doing down during each few for
+from further had has have having he her here hers him his how i if in into is it its itself just me
+more most my no nor not of off on once only or other ought our ours out over own same she should so
+some such than that the their theirs them then there these they this those through to too under
+until up very was we were what when where which while who whom why with would you your yours it's
+one two three don't doesn't isn't aren't won't can't get gets got make makes made take takes taken
+use uses used need needs needed want wants keep keeps kept say says said see sees seen go goes went
+know knows knew think thinks thought thing things way ways time times work works worked""".split())
+
+
+def read(path):
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def strip_markup(text):
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"`[^`]*`", " ", text)
+    text = re.sub(r"\*\*|\*|_|\[\[|\]\]|#+", " ", text)
+    return text
+
+
+def normalize(text):
+    text = re.sub(r"[^a-z0-9 ]", " ", strip_markup(text).lower())
+    return re.sub(r"\s+", " ", text).strip()
+
+
+# A new block starts here; anything else continues the block above it.
+BLOCK_START = re.compile(r"^\s*(?:[-*+]\s|\d+\.\s|>|#{1,6}\s|\|)")
+
+
+def blocks(path):
+    """Rejoin hand-wrapped Markdown into logical blocks, with the start line.
+
+    Canon is wrapped at ~95 columns, so a single rule routinely spans three or
+    four physical lines. Splitting on line boundaries chopped every one of them
+    into fragments that fell under the word floor, and both detectors then
+    reported clean on rules they had never actually compared.
+    """
+    out, buf, start, in_fence = [], [], 1, False
+    lines = read(path).split("\n")
+    # YAML frontmatter is a schema, so `allowed-tools: Bash, Read, Grep, Glob`
+    # is byte-identical across every skill BY DESIGN. Comparing it paired each
+    # skill with each other skill at 1.00 and buried the real findings.
+    first = 0
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                first = i + 1
+                break
+    for lineno, line in enumerate(lines[first:], first + 1):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if not line.strip() or BLOCK_START.match(line):
+            if buf:
+                out.append((" ".join(buf), start))
+                buf = []
+            if line.strip():
+                buf, start = [line.strip()], lineno
+            continue
+        if not buf:
+            start = lineno
+        buf.append(line.strip())
+    if buf:
+        out.append((" ".join(buf), start))
+    return out
+
+
+# Short rules are still rules — "use trash, never rm" is seven words. The floor
+# only exists to stop fragments pairing on nothing, so it sits just under the
+# shortest real rule rather than at a round number.
+MIN_WORDS = 7
+
+
+def sentences(path, min_words=MIN_WORDS):
+    """(normalized, original, line_no) for every sentence worth comparing."""
+    out = []
+    for text, lineno in blocks(path):
+        for raw in re.split(r"(?<=[.!?])\s+", text):
+            norm = normalize(raw)
+            if len(norm.split()) >= min_words:
+                out.append((norm, raw.strip(), lineno))
+    return out
+
+
+def shingles(norm, k=6):
+    words = norm.split()
+    if len(words) < k:
+        return {norm}
+    return {" ".join(words[i:i + k]) for i in range(len(words) - k + 1)}
+
+
+def canon_files(roots):
+    files = []
+    for root in roots:
+        root = pathlib.Path(root)
+        if root.is_file():
+            files.append(root)
+            continue
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            p = root / name
+            # A symlinked twin is the same bytes; comparing it to its target
+            # would report the whole file as duplicated with itself.
+            if p.is_file() and not p.is_symlink():
+                files.append(p)
+        files += sorted(root.glob("skills/*/SKILL.md"))
+        files += sorted(p for p in root.glob("memory/*.md"))
+        files += sorted(root.glob(".agents/memory/*.md"))
+        # A repo's .agents/skills are SYMLINKS to canon. Scanning them is the
+        # point: it puts the repo's own AGENTS.md next to the canon skill it is
+        # most likely to have restated, which is the fork this tool exists for.
+        # resolve() below collapses the symlink to its target, so canon is read
+        # once however many repos are scanned.
+        files += sorted(root.glob(".agents/skills/*/SKILL.md"))
+        files += sorted(root.glob("docs/agent/*.md"))
+    seen, uniq = set(), []
+    for f in files:
+        key = f.resolve()
+        if key not in seen:
+            seen.add(key)
+            uniq.append(f)
+    return uniq
+
+
+def rel(path, roots):
+    for root in roots:
+        try:
+            return str(pathlib.Path(path).relative_to(pathlib.Path(root)))
+        except ValueError:
+            continue
+    return str(path)
+
+
+def find_dupes(docs, threshold):
+    index = collections.defaultdict(list)
+    for path, sents in docs.items():
+        for i, (norm, _raw, _ln) in enumerate(sents):
+            for sh in shingles(norm):
+                index[sh].append((path, i))
+
+    candidates = set()
+    for hits in index.values():
+        # A shingle shared by many files is boilerplate, not a duplicated rule.
+        if len(hits) > 8:
+            continue
+        for a, b in itertools.combinations(sorted(set(hits)), 2):
+            if a[0] != b[0]:
+                candidates.add((a, b))
+
+    found = []
+    for a, b in candidates:
+        sa = shingles(docs[a[0]][a[1]][0])
+        sb = shingles(docs[b[0]][b[1]][0])
+        score = len(sa & sb) / len(sa | sb)
+        if score >= threshold:
+            found.append((score, a, b))
+    found.sort(key=lambda r: -r[0])
+    return found
+
+
+# A topic word in more files than this is vocabulary, not a subject.
+MAX_TOPIC_FILES = 6
+# The modality has to be ABOUT the topic, so require them within this many words.
+MODAL_WINDOW = 6
+
+
+def near_modal(norm, raw, word):
+    """Is `word` within MODAL_WINDOW tokens of the always/only-when marker?
+
+    Without this the pass drowns. On live canon it went from 403 pairs to 13:
+    "never put a load-bearing argument only in the body" and "cut a fresh build
+    by default" both contain "actually" somewhere, which says nothing, whereas
+    "a dedicated worktree, always" has its modality sitting on its subject.
+    """
+    match = ABSOLUTE.search(raw) or CONDITIONAL.search(raw)
+    if not match:
+        return False
+    before = len(normalize(raw[:match.start()]).split())
+    return any(abs(i - before) <= MODAL_WINDOW
+               for i, tok in enumerate(norm.split()) if tok == word)
+
+
+def find_conflicts(docs):
+    """Same subject, opposite modality.
+
+    Deliberately NOT similarity-based. "a dedicated worktree, always" and
+    "worktree only when needed (default: branch in place)" share exactly one
+    content word, so every overlap score puts them at zero — which is precisely
+    why that contradiction survived in canon until someone read both by hand.
+    """
+    file_count = collections.Counter()
+    for _path, sents in docs.items():
+        for word in {w for norm, _r, _l in sents for w in norm.split() if len(w) > 4}:
+            file_count[word] += 1
+
+    by_topic = collections.defaultdict(list)
+    for path, sents in docs.items():
+        for i, (norm, raw, _ln) in enumerate(sents):
+            absolute = bool(ABSOLUTE.search(raw))
+            conditional = bool(CONDITIONAL.search(raw))
+            if absolute == conditional:      # neither, or hedged both ways
+                continue
+            for word in set(norm.split()):
+                if (len(word) > 4 and word not in STOP
+                        and file_count[word] <= MAX_TOPIC_FILES
+                        and near_modal(norm, raw, word)):
+                    by_topic[word].append((path, i, absolute))
+
+    found, seen = [], set()
+    for topic, hits in by_topic.items():
+        # A topic word in many sentences is a common noun, not a subject.
+        if len(hits) > 12:
+            continue
+        for a, b in itertools.combinations(sorted(set(hits)), 2):
+            # Opposite modality is the whole signal, so same modality is not a pair.
+            # Same FILE is still a pair: AGENTS.md is long enough to contradict
+            # itself, and excluding it made the pass blind to exactly the file
+            # most likely to accumulate two rules about one subject.
+            if a[2] == b[2] or (a[0] == b[0] and a[1] == b[1]):
+                continue
+            key = ((a[0], a[1]), (b[0], b[1]))
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append((topic, a, b))
+    found.sort(key=lambda r: r[0])
+    return found
+
+
+def main(argv):
+    mode = "both"
+    threshold = 0.30
+    roots = []
+    args = list(argv)
+    while args:
+        arg = args.pop(0)
+        if arg == "--dupes":
+            mode = "dupes"
+        elif arg == "--conflicts":
+            mode = "conflicts"
+        elif arg == "--min":
+            threshold = float(args.pop(0))
+        elif arg in ("-h", "--help"):
+            print(__doc__)
+            return 0
+        else:
+            roots.append(arg)
+    if not roots:
+        roots = [os.environ.get("AGENTS_DIR", os.path.expanduser("~/.agents"))]
+
+    files = canon_files(roots)
+    if not files:
+        print("canon-dupe: no canon files found in " + ", ".join(roots), file=sys.stderr)
+        return 2
+    docs = {f: sentences(f) for f in files}
+    docs = {f: s for f, s in docs.items() if s}
+
+    findings = 0
+    if mode in ("both", "dupes"):
+        dupes = find_dupes(docs, threshold)
+        print(f"== duplication: {len(dupes)} passage pair(s) at overlap >= {threshold:.2f} ==\n")
+        for score, a, b in dupes:
+            ra, rb = rel(a[0], roots), rel(b[0], roots)
+            print(f"  {score:.2f}  {ra}:{docs[a[0]][a[1]][2]}  <->  {rb}:{docs[b[0]][b[1]][2]}")
+            print(f"        A: {docs[a[0]][a[1]][1][:110]}")
+            print(f"        B: {docs[b[0]][b[1]][1][:110]}")
+        findings += len(dupes)
+        if dupes:
+            print("\n  One home per rule. Keep it where it belongs and leave a pointer, don't")
+            print("  restate it. A verbatim quote or an identical command may be legitimate.\n")
+
+    if mode in ("both", "conflicts"):
+        conflicts = find_conflicts(docs)
+        print(f"== possible conflicts: {len(conflicts)} pair(s), same subject and opposite modality ==\n")
+        for topic, a, b in conflicts:
+            ra, rb = rel(a[0], roots), rel(b[0], roots)
+            absolute, conditional = (a, b) if a[2] else (b, a)
+            print(f"  [{topic}]  {ra}:{docs[a[0]][a[1]][2]}  vs  {rb}:{docs[b[0]][b[1]][2]}")
+            print(f"        absolute:    {docs[absolute[0]][absolute[1]][1][:105]}")
+            print(f"        conditional: {docs[conditional[0]][conditional[1]][1][:105]}")
+        findings += len(conflicts)
+        if conflicts:
+            print("\n  Read each pair. If they really disagree, the newer decision supersedes and")
+            print("  the older wording gets REPLACED, not left beside it. Most will be unrelated")
+            print("  sentences that happen to share a word — that is expected, this pass is a net.\n")
+
+    print("canon-dupe: clean" if findings == 0 else f"canon-dupe: {findings} thing(s) to look at")
+    return 1 if findings else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
