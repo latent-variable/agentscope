@@ -12,12 +12,47 @@ SKILLS="$AGENTS/skills"
 note(){ printf '  %s\n' "$*"; }
 die(){ printf 'error: %s\n' "$*" >&2; exit 1; }
 
+# Resolve a path to an absolute, symlink-free location. The file need not exist;
+# what must exist is its parent. Bounded loop, because a symlink cycle would
+# otherwise hang the bootstrap.
+resolve_path(){
+  local p="$1" d b t i=0
+  while [ $i -lt 40 ]; do
+    d="$(cd "$(dirname "$p")" 2>/dev/null && pwd -P)" || return 1
+    b="$(basename "$p")"
+    [ -L "$d/$b" ] || { printf '%s/%s' "${d%/}" "$b"; return 0; }
+    t="$(readlink "$d/$b")"
+    case "$t" in /*) p="$t";; *) p="$d/$t";; esac
+    i=$((i+1))
+  done
+  return 1
+}
+
+# Everything this script writes must land inside the repo it was pointed at.
+# AGENTS.md is repo-CONTROLLED: a checkout can ship it as a symlink, and step 6
+# writes THROUGH symlinks on purpose (see the note there — some repos keep
+# AGENTS.md as a link to CLAUDE.md). Following a link to ~/.ssh/config or a shell
+# profile truncates that file instead. Legitimate in-repo twins still work; only
+# targets that escape the repo are refused.
+assert_inside_repo(){
+  local label="$1" path="$2" real
+  [ -e "$path" ] || [ -L "$path" ] || return 0
+  real="$(resolve_path "$path")" || die "$label: cannot resolve $path (broken or looping symlink)"
+  case "$real" in
+    "$REPO_REAL"|"$REPO_REAL"/*) return 0 ;;
+    *) die "refusing to write $label: it resolves to $real, outside $REPO_REAL.
+       A repository can ship this path as a symlink; following it would overwrite a file
+       outside the repo. Replace it with a regular file, or point it inside the repo." ;;
+  esac
+}
+
 CHECK=0
 if [ "${1:-}" = "--check" ]; then CHECK=1; shift; fi
 
 REPO="${1:-.}"
 REPO="$(cd "$REPO" 2>/dev/null && pwd)" || die "no such dir: ${1:-.}"
 [ -d "$REPO/.git" ] || die "not a git repo: $REPO"
+REPO_REAL="$(cd "$REPO" && pwd -P)"
 
 # Claude encodes a project's memory path as the abs cwd with '/' -> '-'.
 ENC="$(printf '%s' "$REPO" | tr '/' '-')"
@@ -37,6 +72,12 @@ if [ "$CHECK" = 1 ]; then
   exit 0
 fi
 
+# Check every repo-controlled path we write BEFORE creating anything, so a
+# refusal leaves the repo exactly as it was found.
+assert_inside_repo "AGENTS.md"  "$REPO/AGENTS.md"
+assert_inside_repo ".agents"    "$REPO/.agents"
+assert_inside_repo ".gitignore" "$REPO/.gitignore"
+
 echo "== bootstrapping project scope in $REPO =="
 
 # 1. Dirs
@@ -51,6 +92,21 @@ note "linked $(ls -1 "$PROJ_SKILLS" | wc -l | tr -d ' ') canon skills -> .agents
 
 # 3. Bridge Claude's per-repo memory dir -> the in-repo shared dir, preserving any existing memories.
 if [ -L "$CLAUDE_MEM" ]; then
+  # Claude's key is the abs path with '/' -> '-', so two different repos CAN encode
+  # to the same key: /x/a-b/c and /x/a/b-c collide. We cannot pick a different
+  # encoding — the whole point is to match the directory Claude actually reads — so
+  # instead refuse to take over a bridge that belongs to another repo. Silently
+  # relinking is what makes one project read and write another project's memory.
+  cur="$(readlink "$CLAUDE_MEM")"
+  if [ -n "$cur" ] && [ "$cur" != "$PROJ_MEM" ]; then
+    die "claude memory key collision: $CLAUDE_MEM already bridges to
+       $cur
+       and this repo wants it for
+       $PROJ_MEM
+       Both repo paths encode to the same Claude project key. Bridging anyway would
+       let each repo read and write the other's memory. Rename one directory so the
+       encoded keys differ, or remove that link by hand if it is stale."
+  fi
   ln -sfn "$PROJ_MEM" "$CLAUDE_MEM"; note "relinked claude memory -> .agents/memory"
 elif [ -d "$CLAUDE_MEM" ]; then
   shopt -s dotglob nullglob 2>/dev/null || true

@@ -6,3 +6,8 @@ backups/
 auth-token
 .env
 *.pem
+
+# Any credential a skill or tool of yours drops here. Broad on purpose: the
+# failure mode is a token committed once and public forever.
+secrets/
+*secret*.json
