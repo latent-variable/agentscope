@@ -97,8 +97,17 @@ if [ -L "$CLAUDE_MEM" ]; then
   # encoding — the whole point is to match the directory Claude actually reads — so
   # instead refuse to take over a bridge that belongs to another repo. Silently
   # relinking is what makes one project read and write another project's memory.
+  # Compare RESOLVED locations, not the stored strings. REPO is normalised with
+  # `pwd`, which is logical, so the same repo reached through a symlinked path
+  # spells PROJ_MEM differently on different runs — a raw string compare would
+  # refuse a legitimate re-run and look exactly like the bug this guards against.
   cur="$(readlink "$CLAUDE_MEM")"
-  if [ -n "$cur" ] && [ "$cur" != "$PROJ_MEM" ]; then
+  cur_real=""; mine_real="$(resolve_path "$PROJ_MEM" 2>/dev/null || printf '%s' "$PROJ_MEM")"
+  if [ -n "$cur" ] && [ -e "$cur" ]; then
+    cur_real="$(resolve_path "$cur" 2>/dev/null || printf '%s' "$cur")"
+  fi
+  # A link whose target no longer exists is stale, not contested — take it over.
+  if [ -n "$cur" ] && [ -n "$cur_real" ] && [ "$cur_real" != "$mine_real" ]; then
     die "claude memory key collision: $CLAUDE_MEM already bridges to
        $cur
        and this repo wants it for

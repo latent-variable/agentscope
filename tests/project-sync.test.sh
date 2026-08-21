@@ -131,5 +131,23 @@ if [ $rc -eq 0 ]; then
   ok "idempotent: re-running the owning repo does not trip the collision guard"
 else no "idempotent: second run of the same repo was refused (rc=$rc): $(head -2 <<<"$out")"; fi
 
+# ── 8. A STALE bridge is not a contested one ────────────────────────────────
+# If the repo that owned the bridge is gone, refusing forever leaves the user
+# stuck with no path forward but deleting a link by hand. Take it over instead.
+repo8="$(mkrepo stale-owner)" || exit 2
+run "$repo8" >/dev/null 2>&1
+repo9="$(mkrepo stale-taker)" || exit 2
+enc9="$(printf '%s' "$repo9" | tr '/' '-')"
+mkdir -p "$(dirname "$FAKE_HOME/.claude/projects/$enc9/memory")"
+ln -sfn "$repo8/.agents/memory" "$FAKE_HOME/.claude/projects/$enc9/memory"
+[ -x /usr/bin/trash ] && /usr/bin/trash "$repo8" 2>/dev/null   # owner disappears
+out="$(run "$repo9")"; rc=$?
+if [ $rc -eq 0 ]; then
+  ok "stale: takes over a bridge whose owning repo no longer exists"
+else no "stale: refused a stale bridge, leaving the user stuck (rc=$rc): $(head -3 <<<"$out")"; fi
+if [ "$(readlink "$FAKE_HOME/.claude/projects/$enc9/memory")" = "$repo9/.agents/memory" ]; then
+  ok "stale: the bridge now points at the repo that claimed it"
+else no "stale: bridge not repointed"; fi
+
 printf '\n  PASS=%d  FAIL=%d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
