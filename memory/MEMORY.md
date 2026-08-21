@@ -6,3 +6,4 @@ Read this first; it indexes the rest. One line per memory. Cross-agent: lives in
 > memory file you create (use the `remember` skill). One line each, no content, the file holds the fact.
 
 - [User Profile](user_profile.md), who you are: background, role, preferences (onboarding fills this)
+- [Project Directories](reference_project_dirs.md), where your projects live and your GitHub handle
