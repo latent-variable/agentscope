@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # Run every portable test suite in this repo.
 #
-# These test the two tools that can DESTROY something: worktree.sh (deletes
-# directories) and autopush.sh (commits and pushes on its own). Everything runs
-# against throwaway repos under $TMPDIR; your real canon is never touched.
+# These test the tools that keep the shared brain honest: the drift detector, the
+# always-on context meter, and the duplication scanner. Everything runs against
+# throwaway copies under $TMPDIR; your real canon is never touched.
 #
-#   ./tests/run-tests.sh          # all suites
-#   ./tests/run-tests.sh worktree # one suite, by name fragment
+#   ./tests/run-tests.sh            # all suites
+#   ./tests/run-tests.sh canon      # one suite, by name fragment
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$HERE")"
 FILTER="${1:-}"
 
-export WT_SCRIPT="$ROOT/bin/worktree.sh"
-export AUTOPUSH_SCRIPT="$ROOT/bin/autopush.sh"
+# Every suite resolves its own tool from its checkout, so a suite never silently
+# tests the copy installed at ~/.agents instead of the one in this working tree.
 
 TOTAL_PASS=0; TOTAL_FAIL=0; RAN=0
 

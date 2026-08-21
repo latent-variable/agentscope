@@ -41,7 +41,7 @@ already lives in user-scope canon and must NOT be restated here, not even "for c
 | Product decisions an agent must not "fix" | Writing rules, memory rules, delete-safely rules |
 | Named exceptions where this repo genuinely differs | Dependency-audit doctrine, exposure rule |
 
-**A pointer is the maximum.** `Follows the user-scope review-cycle skill. Project gates: <list>` is
+**A pointer is the maximum.** `Follows the user-scope workflow. Project gates: <list>` is
 right. Re-summarising what that skill says (branch, validate, PR, severity loop, tiers) is wrong,
 even when the summary is currently accurate.
 

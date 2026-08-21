@@ -56,15 +56,22 @@ Want to do it by hand instead? `~/.agents/bin/sync.sh` lays the symlinks; edit `
   skills/       # portable SKILL.md skills, loaded on demand by name
   memory/       # durable cross-agent facts; read MEMORY.md first
   bin/sync.sh   # idempotent installer, points each tool's native paths here
-  bin/verify.sh # drift detector, flags stale paths so an agent self-corrects
-  bin/worktree.sh   # git worktrees that actually build (copies your gitignored config)
   bin/project-sync.sh # bootstrap project scope in a repo
-  bin/autopush.sh   # optional cadence backup, scoped so it can never publish code
+  bin/verify.sh # drift detector, flags stale paths so an agent self-corrects
+  bin/canon-size.sh # meters the context every agent pays on EVERY turn
+  bin/canon-dupe    # finds the same rule stated twice, and rules that contradict
   bin/canon-echo.sh # flags canon restated inside a repo, before it goes stale
-  bin/trello    # optional: read + manage a Trello board from any agent
 ```
 
-**Skills it ships with:** `onboarding` (the setup interview), `remember` (any agent writes a fact, all of them inherit it), `self-correct` (canon repairs itself when reality drifts), `cleanup` (deliberate consistency sweep across every layer), `project-scope` (per-repo agent context), `review-cycle` (branch, PR, review, merge), `voice` (write as the user without sounding like an LLM), `eli5` (plain-language explanations on demand), `pull-requests`, `draft-response`, `security-audit`.
+**Skills it ships with:** `onboarding` (the setup interview), `remember` (any agent writes a fact, all of them inherit it), `self-correct` (canon repairs itself when reality drifts), `cleanup` (deliberate consistency sweep across every layer), `project-scope` (per-repo agent context).
+
+### What this repo deliberately does not ship
+
+No worktree helper, no ticket-board CLI, no review workflow, no writing-voice skill. Those are *your* working style, and mine would be wrong for you.
+
+What is here is the part that generalises: **one brain, shared by every agent CLI you use, that stays honest as it grows.** The four `bin/` tools above exist because a shared brain has exactly one failure mode — it rots. It accumulates rules nobody removes, the same rule written down three times in three files, and prose that quietly costs you tokens on every single turn. Those tools measure that, so you can act on it before an agent acts on a stale rule.
+
+Build your own workflow skills on top. That is the whole point of `skills/`.
 
 ## How each tool gets wired
 

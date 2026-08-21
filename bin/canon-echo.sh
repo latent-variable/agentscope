@@ -18,15 +18,18 @@
 set -uo pipefail
 
 # pattern <TAB> what it is <TAB> who owns it
+#
+# These are STARTERS, not scripture. They are the rules people most often paste
+# into a repo's AGENTS.md after writing them once in user scope. Add your own as
+# you notice yourself repeating something: the value is entirely in the patterns
+# that match YOUR canon, and a rule you never wrote costs a wasted grep.
 RULES=$(cat <<'EOF'
-human-supervised|require(s)? explicit approval|do NOT operate autonomously|explicit (user )?approval before merg|merge only on	merge gate	review-cycle skill
-Co-Authored-By	commit attribution	AGENTS.md (Assisted-by)
-never mirror work onto the board|human-triggered only	ticket-board posture	trello skill
-branch off .?main.*(validate|PR).*(review|merge)|severity.gated loop|zero high/critical.*then merge	the review workflow itself	review-cycle skill
-gemini review|Gemini Code Assist	a reviewer that no longer exists	review-cycle skill
+human-supervised|require(s)? explicit approval|do NOT operate autonomously|explicit (user )?approval before merg|merge only on	merge gate	your user-scope canon
+Co-Authored-By	commit attribution	AGENTS.md
+branch off .?main.*(validate|PR).*(review|merge)|severity.gated loop|zero high/critical.*then merge	the review workflow itself	your user-scope canon
 never .?rm -rf|trash., never	destructive-delete rule	AGENTS.md
 no em.dash|em dashes.* in any	writing rules	AGENTS.md
-deploys? (are|stay) gated	deploy gating	review-cycle skill
+deploys? (are|stay) gated	deploy gating	your user-scope canon
 commit proactively	commit cadence	AGENTS.md
 EOF
 )
